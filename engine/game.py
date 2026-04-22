@@ -381,6 +381,15 @@ class Game:
         """
         Compute fold penalties and run round-robin battles.
         Updates score_round and score_total on every player.
+
+        Fold rule: when a player folds they give 3 points to every player
+        who comes AFTER them in the decision queue, regardless of whether
+        those later players also fold or choose to play.
+
+        Example (queue: P1 -> P2 -> P3, P1 folds, P2 folds, P3 plays):
+          P1 folds at pos 0 -> pays 3 to P2 and P3: P1 -6
+          P2 folds at pos 1 -> pays 3 to P3 only:   P2 +3-3 = 0
+          P3 plays at pos 2 -> gained 3+3 from folds: P3 +6
         """
         play_players = [p for p in self._players if p.decision == "play"]
         fold_players = sorted(
@@ -388,21 +397,18 @@ class Game:
             key=lambda p: p.fold_order,   # type: ignore[arg-type]
         )
 
-        n_play = len(play_players)
-        n_fold = len(fold_players)
-
         # ── Fold penalty scoring ───────────────
-        # Each folder[i] loses 3 for every player who chose play,
-        # and gains 3 for each player who folds AFTER them.
-        for i, folder in enumerate(fold_players):
-            subsequent = n_fold - i - 1
-            folder.score_round += 3 * subsequent          # gains from later folders
-            folder.score_round -= 3 * (n_play + subsequent)  # pays everyone non-folded now
-            # net per folder = -3 * n_play (fold order doesn't change the net)
-
-        # Each play player gains 3 per folder
-        for player in play_players:
-            player.score_round += 3 * n_fold
+        # Walk the decision queue in order. Each folder at position i
+        # gives 3 to every player at positions i+1 … n-1.
+        n = len(self._decision_queue)
+        for i, pid in enumerate(self._decision_queue):
+            player = self._get_player(pid)
+            if player.decision == "fold":
+                subsequent_count = n - i - 1
+                player.score_round -= 3 * subsequent_count      # folder pays
+                for j in range(i + 1, n):
+                    recipient = self._get_player(self._decision_queue[j])
+                    recipient.score_round += 3                   # each later player gains
 
         # ── Battle scoring (round-robin) ───────
         battles: List[BattleResult] = []
