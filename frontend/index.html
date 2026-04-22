@@ -273,9 +273,12 @@ input:focus { border-color: var(--gold-dim); }
   height: 100%;
   position: relative;
   transform-style: preserve-3d;
-  transition: transform 0.46s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.55s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 .card-inner.revealed { transform: rotateY(180deg); }
+.card-wrapper.flipping .card-inner {
+  transition: transform 0.55s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
 .card-back-face {
   position: absolute;
   inset: 0;
@@ -1114,17 +1117,73 @@ function renderAllZones() {
   document.getElementById('split-hint').textContent = ready
     ? 'Ready! Click Confirm Split.'
     : !revealed.size
-      ? 'Click any card to flip it, then drag to Front or Back.'
+      ? 'Click a card to flip it — click again to assign, or drag.'
       : frontIdxs.length < 2
-        ? `Drag ${2 - frontIdxs.length} more card(s) to Front.`
-        : `Drag ${3 - backIdxs.length} more card(s) to Back.`;
+        ? `Click or drag ${2 - frontIdxs.length} more card(s) to Front.`
+        : `Click or drag ${3 - backIdxs.length} more card(s) to Back.`;
 }
 
-// ── Card click: reveal (flip) ────────────────────────────────────────────────
+// ── Card click: 3 cases ─────────────────────────────────────────────────────
 function onCardClick(idx) {
   if (splitDone) return;
-  if (revealed.has(idx)) return;   // already revealed — clicks handled by drag
-  revealed.add(idx);
+
+  // Case 1: Not yet revealed → flip the card with animation
+  if (!revealed.has(idx)) {
+    flipCard(idx);
+    return;
+  }
+
+  // Case 2: Revealed, in front zone → return to hand
+  if (frontIdxs.includes(idx)) {
+    frontIdxs = frontIdxs.filter(i => i !== idx);
+    handIdxs.push(idx);
+    renderAllZones();
+    return;
+  }
+
+  // Case 3: Revealed, in back zone → return to hand
+  if (backIdxs.includes(idx)) {
+    backIdxs = backIdxs.filter(i => i !== idx);
+    handIdxs.push(idx);
+    renderAllZones();
+    return;
+  }
+
+  // Case 4: Revealed, in hand → auto-assign to next open slot
+  autoAssignCard(idx);
+}
+
+function flipCard(idx, delay) {
+  // Direct DOM manipulation so the CSS transition actually plays.
+  // renderAllZones() rebuilds innerHTML so the class is already present
+  // in the new element — no transition. This avoids that problem.
+  const doFlip = () => {
+    revealed.add(idx);
+    const wrapper = document.querySelector(`.card-wrapper[data-idx="${idx}"]`);
+    if (!wrapper) return;
+    wrapper.classList.add('flipping');
+    wrapper.querySelector('.card-inner').classList.add('revealed');
+    wrapper.setAttribute('draggable', 'true');
+    // After animation (550ms), auto-assign and remove flipping class
+    setTimeout(() => {
+      wrapper.classList.remove('flipping');
+      if (!splitDone && handIdxs.includes(idx)) autoAssignCard(idx);
+    }, 560);
+  };
+  if (delay) setTimeout(doFlip, delay);
+  else doFlip();
+}
+
+function autoAssignCard(idx) {
+  if (!handIdxs.includes(idx)) return;
+  if (frontIdxs.length < 2) {
+    handIdxs  = handIdxs.filter(i => i !== idx);
+    frontIdxs.push(idx);
+  } else if (backIdxs.length < 3) {
+    handIdxs  = handIdxs.filter(i => i !== idx);
+    backIdxs.push(idx);
+  }
+  // both full → card stays in hand (nothing to do)
   renderAllZones();
 }
 
@@ -1244,8 +1303,10 @@ document.addEventListener('touchend', e => {
 
 function revealAll() {
   if (splitDone) return;
-  myHand.forEach((_,i) => revealed.add(i));
-  renderAllZones();
+  // Only flip cards still face-down in hand (don't re-flip zone cards)
+  const toFlip = handIdxs.filter(i => !revealed.has(i));
+  if (!toFlip.length) return;
+  toFlip.forEach((idx, order) => flipCard(idx, order * 130));
 }
 
 
@@ -1268,7 +1329,7 @@ function renderMySplitPreview(front, back) {
 
 function onSplitReceived(d) {
   renderPlayersBar(d.waiting_for);
-  if (d.player_id !== myId) {
+  if (d.player !== myId) {
     toast(`${d.player} submitted their split`);
   }
 }
