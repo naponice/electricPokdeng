@@ -256,32 +256,72 @@ input:focus { border-color: var(--gold-dim); }
   border-bottom: 1px solid var(--border);
 }
 
-/* ── Cards ──────────────────────────────────── */
-.card {
+/* ── Card flip container ─────────────────────── */
+.card-wrapper {
   width: var(--card-w);
   height: var(--card-h);
-  background: var(--cream);
+  perspective: 700px;
+  flex-shrink: 0;
+  cursor: pointer;
+  position: relative;
+}
+.card-wrapper.in-zone { cursor: grab; }
+.card-wrapper.in-zone:active { cursor: grabbing; }
+.card-wrapper.dragging { opacity: 0.3; }
+.card-inner {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.46s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.card-inner.revealed { transform: rotateY(180deg); }
+.card-back-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
   border-radius: 8px;
+  background: repeating-linear-gradient(
+    45deg, #1a4528 0, #1a4528 4px, #0f2e1a 4px, #0f2e1a 8px
+  );
+  border: 2px solid rgba(201,148,58,.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color .2s;
+}
+.card-back-face::after {
+  content: '?';
+  font-family: 'Libre Baskerville', serif;
+  font-size: 1.5rem;
+  color: rgba(201,148,58,.45);
+  font-style: italic;
+  transition: color .2s;
+}
+.card-wrapper:not(.in-zone):hover .card-back-face { border-color: rgba(201,148,58,.75); }
+.card-wrapper:not(.in-zone):hover .card-back-face::after { color: rgba(201,148,58,.9); }
+.card-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform: rotateY(180deg);
+  border-radius: 8px;
+  background: var(--cream);
   box-shadow: 0 3px 12px rgba(0,0,0,.5), 0 1px 3px rgba(0,0,0,.4);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  position: relative;
-  cursor: default;
-  transition: transform .15s, box-shadow .15s;
-  flex-shrink: 0;
   user-select: none;
 }
-.card.clickable { cursor: pointer; }
-.card.clickable:hover { transform: translateY(-6px); box-shadow: 0 8px 20px rgba(0,0,0,.55); }
-.card.selected-front {
-  transform: translateY(-10px);
-  box-shadow: 0 10px 24px rgba(201,148,58,.45), 0 0 0 2.5px var(--gold);
-}
-.card.selected-back {
-  transform: translateY(-6px);
-  box-shadow: 0 8px 20px rgba(41,128,185,.4), 0 0 0 2px #2980b9;
+.card-face.red   { color: var(--card-red);   }
+.card-face.black { color: var(--card-black); }
+.card-face.joker {
+  background: linear-gradient(135deg, #fef9f0 0%, #fdf0c8 100%);
+  border: 2px solid var(--gold);
+  color: var(--gold);
 }
 .card-corner {
   position: absolute;
@@ -298,26 +338,17 @@ input:focus { border-color: var(--gold-dim); }
 .card-corner .c-suit { font-size: 0.7rem; }
 .card-corner.top-left  { top: 5px; left: 7px; }
 .card-corner.bot-right { bottom: 5px; right: 7px; transform: rotate(180deg); }
-.card-center-suit {
-  font-size: 2.2rem;
-  line-height: 1;
-  margin-top: 2px;
+.card-center-suit { font-size: 2.2rem; line-height: 1; margin-top: 2px; }
+.card-face.joker .card-center-suit { font-size: 1.8rem; }
+.drop-zone-active {
+  outline: 2px dashed rgba(201,148,58,.5) !important;
+  outline-offset: 3px;
+  background: rgba(201,148,58,.06) !important;
 }
-.card.red  .card-corner, .card.red  .card-center-suit { color: var(--card-red); }
-.card.black .card-corner, .card.black .card-center-suit { color: var(--card-black); }
-.card.joker {
-  background: linear-gradient(135deg, #fef9f0 0%, #fdf0c8 100%);
-  border: 2px solid var(--gold);
+.drop-zone-active.back-target {
+  outline-color: rgba(41,128,185,.5) !important;
+  background: rgba(41,128,185,.06) !important;
 }
-.card.joker .card-corner { color: var(--gold); }
-.card.joker .card-center-suit { font-size: 1.8rem; color: var(--gold); }
-.card-back {
-  background: repeating-linear-gradient(
-    45deg, #1a4528 0, #1a4528 4px, #0f2e1a 4px, #0f2e1a 8px
-  );
-  border: 2px solid rgba(201,148,58,.4);
-}
-
 /* ── Hand Zones ─────────────────────────────── */
 .hand-section { display: flex; flex-direction: column; gap: 1rem; }
 .zone-label {
@@ -755,15 +786,20 @@ input:focus { border-color: var(--gold-dim); }
 
     <!-- SPLITTING zone (my cards) -->
     <div id="zone-split" class="hand-section hidden">
+
+      <!-- Drop zones: Front + Back -->
       <div class="split-container">
         <div class="split-zone front-zone">
           <div class="split-zone-header">
             <span class="split-zone-title">Front</span>
             <span class="slot-count" id="front-count">0 / 2</span>
           </div>
-          <div class="card-row" id="front-row">
-            <div class="card-slot"></div>
-            <div class="card-slot"></div>
+          <div class="card-row drop-zone" id="front-row" data-zone="front"
+               ondragover="onDragOver(event,'front')"
+               ondragleave="onDragLeave(event,'front')"
+               ondrop="onDrop(event,'front')">
+            <div class="card-slot" style="width:var(--card-w);height:var(--card-h);border:2px dashed rgba(201,148,58,.2);border-radius:8px;flex-shrink:0;"></div>
+            <div class="card-slot" style="width:var(--card-w);height:var(--card-h);border:2px dashed rgba(201,148,58,.2);border-radius:8px;flex-shrink:0;"></div>
           </div>
         </div>
         <div class="split-zone back-zone">
@@ -771,26 +807,35 @@ input:focus { border-color: var(--gold-dim); }
             <span class="split-zone-title">Back</span>
             <span class="slot-count" id="back-count">0 / 3</span>
           </div>
-          <div class="card-row" id="back-row">
-            <div class="card-slot"></div>
-            <div class="card-slot"></div>
-            <div class="card-slot"></div>
+          <div class="card-row drop-zone" id="back-row" data-zone="back"
+               ondragover="onDragOver(event,'back')"
+               ondragleave="onDragLeave(event,'back')"
+               ondrop="onDrop(event,'back')">
+            <div class="card-slot" style="width:var(--card-w);height:var(--card-h);border:2px dashed rgba(41,128,185,.2);border-radius:8px;flex-shrink:0;"></div>
+            <div class="card-slot" style="width:var(--card-w);height:var(--card-h);border:2px dashed rgba(41,128,185,.2);border-radius:8px;flex-shrink:0;"></div>
+            <div class="card-slot" style="width:var(--card-w);height:var(--card-h);border:2px dashed rgba(41,128,185,.2);border-radius:8px;flex-shrink:0;"></div>
           </div>
         </div>
       </div>
 
       <hr class="divider">
 
+      <!-- Hand row — face-down, click to reveal, then drag -->
       <div>
-        <div class="zone-label">Your hand — <span>click to assign to front</span></div>
-        <div class="card-row" id="hand-row"></div>
+        <div class="zone-label">Your hand — <span>click to reveal, then drag to assign</span></div>
+        <div class="card-row drop-zone" id="hand-row" data-zone="hand"
+             ondragover="onDragOver(event,'hand')"
+             ondragleave="onDragLeave(event,'hand')"
+             ondrop="onDrop(event,'hand')">
+        </div>
       </div>
 
       <div class="split-action">
+        <button class="btn btn-ghost" onclick="revealAll()" style="flex-shrink:0;">Reveal all</button>
         <button id="btn-confirm-split" class="btn btn-gold" onclick="confirmSplit()" disabled>
           Confirm Split
         </button>
-        <span class="split-hint" id="split-hint">Select 2 cards for your front hand.</span>
+        <span class="split-hint" id="split-hint">Reveal cards, then drag 2 to Front and 3 to Back.</span>
       </div>
     </div>
 
@@ -864,7 +909,7 @@ let socket       = null;
 let myId         = '';
 let myRoom       = '';
 let myHand       = [];       // ['As','Kh',…]
-let frontSel     = [];       // cards selected for front (max 2)
+let frontSel     = [];       // legacy — superseded by frontIdxs (kept for compat)
 let gamePhase    = 'waiting';
 let players      = [];       // [{player_id, seat, decision, score_total, …}]
 let scores       = {};       // {player_id: total}
@@ -893,55 +938,62 @@ function toast(msg, isError = false) {
 }
 
 // ── Card rendering ──────────────────────────────────────────────────────────
-const SUIT_SYM  = { s: '♠', h: '♥', d: '♦', c: '♣' };
-const SUIT_CLS  = { s: 'black', h: 'red', d: 'red', c: 'black' };
+const SUIT_SYM = { s: '♠', h: '♥', d: '♦', c: '♣' };
+const SUIT_CLS = { s: 'black', h: 'red', d: 'red', c: 'black' };
 
-function cardHtml(cardStr, size = 'normal') {
-  if (!cardStr) return '';
-  if (size === 'mini') return miniCardHtml(cardStr);
-
+function cardFaceHtml(cardStr) {
   if (cardStr === 'JK') {
-    return `<div class="card joker">
+    return `<div class="card-face joker">
       <div class="card-corner top-left"><span class="c-rank">J</span><span class="c-suit">★</span></div>
       <div class="card-center-suit">★</div>
       <div class="card-corner bot-right"><span class="c-rank">K</span></div>
     </div>`;
   }
-  const suit  = cardStr.slice(-1);
-  const rank  = cardStr.slice(0, -1) === 'T' ? '10' : cardStr.slice(0, -1);
-  const cls   = SUIT_CLS[suit];
-  const sym   = SUIT_SYM[suit];
-  return `<div class="card ${cls}">
-    <div class="card-corner top-left"><span class="c-rank">${rank}</span><span class="c-suit">${sym}</span></div>
-    <div class="card-center-suit">${sym}</div>
-    <div class="card-corner bot-right"><span class="c-rank">${rank}</span><span class="c-suit">${sym}</span></div>
+  const suit = cardStr.slice(-1);
+  const rank = cardStr.slice(0, -1) === 'T' ? '10' : cardStr.slice(0, -1);
+  return `<div class="card-face ${SUIT_CLS[suit]}">
+    <div class="card-corner top-left"><span class="c-rank">${rank}</span><span class="c-suit">${SUIT_SYM[suit]}</span></div>
+    <div class="card-center-suit">${SUIT_SYM[suit]}</div>
+    <div class="card-corner bot-right"><span class="c-rank">${rank}</span><span class="c-suit">${SUIT_SYM[suit]}</span></div>
   </div>`;
 }
 
 function miniCardHtml(cardStr) {
-  if (cardStr === 'JK') {
-    return `<div class="mini-card joker"><span class="mc-rank">JK</span><span class="mc-suit">★</span></div>`;
-  }
+  if (cardStr === 'JK') return `<div class="mini-card joker"><span class="mc-rank">JK</span><span class="mc-suit">★</span></div>`;
   const suit = cardStr.slice(-1);
   const rank = cardStr.slice(0, -1) === 'T' ? '10' : cardStr.slice(0, -1);
   return `<div class="mini-card ${SUIT_CLS[suit]}"><span class="mc-rank">${rank}</span><span class="mc-suit">${SUIT_SYM[suit]}</span></div>`;
 }
+
+// Plain (non-interactive) card — used in showdown preview and decision display
+function cardHtml(cardStr, size = 'normal') {
+  if (!cardStr) return '';
+  if (size === 'mini') return miniCardHtml(cardStr);
+  return `<div style="width:var(--card-w);height:var(--card-h);position:relative;flex-shrink:0;">
+    <div class="card-inner revealed">${cardFaceHtml(cardStr)}<div class="card-back-face"></div></div>
+  </div>`;
+}
+
+// ── Split state ──────────────────────────────────────────────────────────────
+// Each entry: { idx, card }  (idx = original position in myHand)
+let handIdxs  = [];   // indices still in hand
+let frontIdxs = [];   // indices in front zone (max 2, ordered)
+let backIdxs  = [];   // indices in back zone  (max 3, ordered)
+let revealed  = new Set();  // set of indices whose cards have been flipped
+
+let dragIdx   = null;   // index being dragged
+let dragFrom  = null;   // 'hand' | 'front' | 'back'
 
 // ── Connect ─────────────────────────────────────────────────────────────────
 function joinGame() {
   const room   = document.getElementById('input-room').value.trim().toUpperCase();
   const player = document.getElementById('input-player').value.trim();
   if (!room || !player) { toast('Enter room and name', true); return; }
-
-  myId   = player;
-  myRoom = room;
-
+  myId = player; myRoom = room;
   socket = io(window.location.origin, { transports: ['websocket'] });
-
-  socket.on('connect',    ()  => socket.emit('join', { room: myRoom, username: myId }));
-  socket.on('disconnect', ()  => toast('Disconnected from server', true));
-  socket.on('error',      d   => toast(d.message, true));
-
+  socket.on('connect',    () => socket.emit('join', { room: myRoom, username: myId }));
+  socket.on('disconnect', () => toast('Disconnected from server', true));
+  socket.on('error',      d  => toast(d.message, true));
   socket.on('joined',         onJoined);
   socket.on('player_joined',  onPlayerJoined);
   socket.on('player_left',    d => toast(`${d.player_id} left`));
@@ -955,32 +1007,22 @@ function joinGame() {
   socket.on('round_started',  onRoundStarted);
   socket.on('game_state',     onGameState);
 }
-
-function startGame() {
-  socket.emit('start_game', { room: myRoom });
-}
-
-function nextRound() {
-  socket.emit('next_round', { room: myRoom });
-  hide('zone-showdown');
-}
+function startGame() { socket.emit('start_game', { room: myRoom }); }
+function nextRound()  { socket.emit('next_round',  { room: myRoom }); hide('zone-showdown'); }
 
 // ── Event handlers ──────────────────────────────────────────────────────────
 function onJoined(d) {
-  players = d.players;
-  scores  = d.scores;
+  players = d.players; scores = d.scores;
   updateLobbyPlayers();
   showScreen('lobby');
   document.getElementById('btn-start').disabled = players.length < 2;
 }
-
 function onPlayerJoined(d) {
   players = d.players;
   updateLobbyPlayers();
   document.getElementById('btn-start').disabled = players.length < 2;
   toast(`${d.player_id} joined`);
 }
-
 function updateLobbyPlayers() {
   const el = document.getElementById('lobby-players');
   el.innerHTML = players.map(p =>
@@ -991,7 +1033,6 @@ function updateLobbyPlayers() {
      </div>`
   ).join('');
 }
-
 function onGameStarted(d) {
   showScreen('game');
   document.getElementById('top-room').textContent  = 'ROOM: ' + myRoom;
@@ -1000,114 +1041,229 @@ function onGameStarted(d) {
   setPhaseBanner('Splitting hands…');
   gamePhase = 'splitting';
   splitDone = false;
-  frontSel  = [];
   renderPlayersBar();
   renderIdleScores();
 }
-
 function onDealCards(d) {
-  myHand   = d.cards;
-  frontSel = [];
+  myHand = d.cards;
   splitDone = false;
+  // Reset split state
+  handIdxs  = myHand.map((_, i) => i);
+  frontIdxs = [];
+  backIdxs  = [];
+  revealed  = new Set();
   renderSplitUI();
 }
 
+// ── Split UI ─────────────────────────────────────────────────────────────────
 function renderSplitUI() {
-  hide('zone-split-wait');
-  hide('zone-my-split');
-  hide('zone-showdown');
-  hide('zone-decision');
+  hide('zone-split-wait'); hide('zone-my-split');
+  hide('zone-showdown');   hide('zone-decision');
   hide('zone-spectating');
-  show('zone-split');
-  show('zone-scores');
-  renderHandRow();
-  updateSplitSlots();
+  show('zone-split');      show('zone-scores');
+  renderAllZones();
 }
 
-function renderHandRow() {
-  const row = document.getElementById('hand-row');
-  row.innerHTML = myHand.map((card, i) => {
-    const inFront = frontSel.includes(card + ':' + i);
-    const html    = cardHtml(card);
-    const sel     = inFront ? 'selected-front' : '';
-    const el      = document.createElement('div');
-    el.style.position = 'relative';
-    el.innerHTML = `<div class="card-wrapper ${sel}" data-idx="${i}">${html}</div>`;
-    return el.outerHTML;
-  }).join('');
-  // Re-render properly
-  row.innerHTML = myHand.map((card, i) => {
-    const key     = card + ':' + i;
-    const inFront = frontSel.includes(key);
-    return `<div onclick="toggleFront(${i})">${
-      cardHtml(card).replace('<div class="card', `<div class="card clickable ${inFront ? 'selected-front' : ''}`)
-    }</div>`;
-  }).join('');
+function makeCardWrapper(idx, zone) {
+  // zone: 'hand' | 'front' | 'back'
+  const card    = myHand[idx];
+  const isRev   = revealed.has(idx);
+  const inZone  = zone !== 'hand';
+  const draggable = isRev ? 'true' : 'false';
+  return `<div class="card-wrapper ${inZone ? 'in-zone' : ''}"
+              data-idx="${idx}" data-zone="${zone}"
+              draggable="${draggable}"
+              onclick="onCardClick(${idx})"
+              ondragstart="onDragStart(event,${idx},'${zone}')"
+              ondragend="onDragEnd(event,${idx})"
+              ontouchstart="onTouchStart(event,${idx},'${zone}')">
+    <div class="card-inner ${isRev ? 'revealed' : ''}">
+      <div class="card-back-face"></div>
+      ${cardFaceHtml(card)}
+    </div>
+  </div>`;
 }
 
-function toggleFront(idx) {
-  if (splitDone) return;
-  const key = myHand[idx] + ':' + idx;
-  if (frontSel.includes(key)) {
-    frontSel = frontSel.filter(k => k !== key);
-  } else if (frontSel.length < 2) {
-    frontSel.push(key);
-  }
-  renderHandRow();
-  updateSplitSlots();
-}
-
-function updateSplitSlots() {
-  const backKeys = myHand
-    .map((c, i) => ({ key: c + ':' + i, card: c }))
-    .filter(o => !frontSel.includes(o.key))
-    .map(o => o.card);
-
-  const frontCards = frontSel.map(k => k.split(':')[0]);
-
+function renderAllZones() {
   const frontRow = document.getElementById('front-row');
   const backRow  = document.getElementById('back-row');
-  document.getElementById('front-count').textContent = frontCards.length + ' / 2';
-  document.getElementById('back-count').textContent  = backKeys.length   + ' / 3';
+  const handRow  = document.getElementById('hand-row');
 
-  frontRow.innerHTML = '';
-  for (let i = 0; i < 2; i++) {
-    if (frontCards[i]) frontRow.innerHTML += `<div>${cardHtml(frontCards[i])}</div>`;
-    else               frontRow.innerHTML += `<div class="card-slot"></div>`;
-  }
-  backRow.innerHTML = '';
-  for (let i = 0; i < 3; i++) {
-    if (backKeys[i]) backRow.innerHTML += `<div>${cardHtml(backKeys[i])}</div>`;
-    else             backRow.innerHTML += `<div class="card-slot"></div>`;
-  }
+  // Front zone: placed cards + empty slots
+  frontRow.innerHTML = frontIdxs.map(idx => makeCardWrapper(idx, 'front')).join('') +
+    Array(2 - frontIdxs.length).fill(0).map(() =>
+      `<div class="card-slot" style="width:var(--card-w);height:var(--card-h);border:2px dashed rgba(201,148,58,.2);border-radius:8px;flex-shrink:0;"></div>`
+    ).join('');
 
-  const ready = frontCards.length === 2;
+  // Back zone: placed cards + empty slots
+  backRow.innerHTML = backIdxs.map(idx => makeCardWrapper(idx, 'back')).join('') +
+    Array(3 - backIdxs.length).fill(0).map(() =>
+      `<div class="card-slot" style="width:var(--card-w);height:var(--card-h);border:2px dashed rgba(41,128,185,.2);border-radius:8px;flex-shrink:0;"></div>`
+    ).join('');
+
+  // Hand row: unrevealed/unassigned cards
+  handRow.innerHTML = handIdxs.map(idx => makeCardWrapper(idx, 'hand')).join('');
+
+  // Counts
+  document.getElementById('front-count').textContent = frontIdxs.length + ' / 2';
+  document.getElementById('back-count').textContent  = backIdxs.length  + ' / 3';
+
+  // Confirm button
+  const ready = frontIdxs.length === 2 && backIdxs.length === 3;
   document.getElementById('btn-confirm-split').disabled = !ready;
   document.getElementById('split-hint').textContent = ready
-    ? 'Ready to confirm your split.'
-    : `Select ${2 - frontCards.length} more card(s) for front.`;
+    ? 'Ready! Click Confirm Split.'
+    : !revealed.size
+      ? 'Click any card to flip it, then drag to Front or Back.'
+      : frontIdxs.length < 2
+        ? `Drag ${2 - frontIdxs.length} more card(s) to Front.`
+        : `Drag ${3 - backIdxs.length} more card(s) to Back.`;
 }
 
+// ── Card click: reveal (flip) ────────────────────────────────────────────────
+function onCardClick(idx) {
+  if (splitDone) return;
+  if (revealed.has(idx)) return;   // already revealed — clicks handled by drag
+  revealed.add(idx);
+  renderAllZones();
+}
+
+// ── Drag and Drop ────────────────────────────────────────────────────────────
+function onDragStart(e, idx, fromZone) {
+  if (!revealed.has(idx)) { e.preventDefault(); return; }  // can't drag face-down
+  dragIdx  = idx;
+  dragFrom = fromZone;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', idx);
+  // Add dragging class after ghost snapshot (50ms delay)
+  setTimeout(() => {
+    document.querySelectorAll(`.card-wrapper[data-idx="${idx}"]`).forEach(el =>
+      el.classList.add('dragging')
+    );
+  }, 50);
+}
+
+function onDragEnd(e, idx) {
+  dragIdx = null; dragFrom = null;
+  document.querySelectorAll('.card-wrapper').forEach(el => el.classList.remove('dragging'));
+}
+
+function onDragOver(e, zone) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const row = document.getElementById(zone === 'hand' ? 'hand-row' : zone === 'front' ? 'front-row' : 'back-row');
+  row.classList.add('drop-zone-active');
+  if (zone === 'back') row.classList.add('back-target');
+}
+
+function onDragLeave(e, zone) {
+  const row = document.getElementById(zone === 'hand' ? 'hand-row' : zone === 'front' ? 'front-row' : 'back-row');
+  if (!row.contains(e.relatedTarget)) {
+    row.classList.remove('drop-zone-active', 'back-target');
+  }
+}
+
+function onDrop(e, toZone) {
+  e.preventDefault();
+  const row = document.getElementById(toZone === 'hand' ? 'hand-row' : toZone === 'front' ? 'front-row' : 'back-row');
+  row.classList.remove('drop-zone-active', 'back-target');
+
+  if (dragIdx === null || dragFrom === toZone) return;
+
+  const idx = dragIdx;
+
+  // Check zone capacity
+  if (toZone === 'front' && frontIdxs.length >= 2) { toast('Front hand is full (max 2 cards)', true); return; }
+  if (toZone === 'back'  && backIdxs.length  >= 3) { toast('Back hand is full (max 3 cards)', true);  return; }
+
+  // Remove from source
+  if (dragFrom === 'hand')  handIdxs  = handIdxs.filter(i => i !== idx);
+  if (dragFrom === 'front') frontIdxs = frontIdxs.filter(i => i !== idx);
+  if (dragFrom === 'back')  backIdxs  = backIdxs.filter(i => i !== idx);
+
+  // Add to target
+  if (toZone === 'hand')  handIdxs.push(idx);
+  if (toZone === 'front') frontIdxs.push(idx);
+  if (toZone === 'back')  backIdxs.push(idx);
+
+  renderAllZones();
+}
+
+// ── Touch drag-and-drop (iOS / Android) ──────────────────────────────────────
+let touchCard = null, touchClone = null, touchLastZone = null;
+
+function zoneRowId(z) { return z==='front'?'front-row':z==='back'?'back-row':'hand-row'; }
+
+function zoneAtPoint(x, y) {
+  for (const el of document.elementsFromPoint(x, y)) {
+    if (el.dataset && el.dataset.zone) return el.dataset.zone;
+    const r = el.closest && el.closest('[data-zone]');
+    if (r) return r.dataset.zone;
+  }
+  return null;
+}
+
+function onTouchStart(e, idx, zone) {
+  if (splitDone || !revealed.has(idx)) return;
+  e.preventDefault();
+  touchCard = { idx, zone };
+  const src = e.currentTarget, rect = src.getBoundingClientRect();
+  touchClone = src.cloneNode(true);
+  Object.assign(touchClone.style, {
+    position:'fixed', pointerEvents:'none', zIndex:'9999',
+    width: rect.width+'px', height: rect.height+'px',
+    left: rect.left+'px', top: rect.top+'px', opacity:'0.85', transition:'none'
+  });
+  document.body.appendChild(touchClone);
+  src.style.opacity = '0.25';
+  touchLastZone = zone;
+}
+
+function _moveTouchClone(t) {
+  if (!touchClone) return;
+  touchClone.style.left = (t.clientX - parseFloat(touchClone.style.width)/2)+'px';
+  touchClone.style.top  = (t.clientY - parseFloat(touchClone.style.height)/2)+'px';
+  const zone = zoneAtPoint(t.clientX, t.clientY);
+  if (zone !== touchLastZone) {
+    if (touchLastZone) { const p=document.getElementById(zoneRowId(touchLastZone)); if(p) p.classList.remove('drop-zone-active','back-target'); }
+    if (zone) { const r=document.getElementById(zoneRowId(zone)); if(r){ r.classList.add('drop-zone-active'); if(zone==='back') r.classList.add('back-target'); } }
+    touchLastZone = zone;
+  }
+}
+
+document.addEventListener('touchmove', e => { if (!touchCard) return; e.preventDefault(); _moveTouchClone(e.touches[0]); }, { passive:false });
+document.addEventListener('touchend', e => {
+  if (!touchCard) return;
+  const t = e.changedTouches[0], toZone = zoneAtPoint(t.clientX, t.clientY);
+  if (touchClone) { touchClone.remove(); touchClone = null; }
+  document.querySelectorAll('.card-wrapper').forEach(el => el.style.opacity = '');
+  document.querySelectorAll('.drop-zone-active').forEach(el => el.classList.remove('drop-zone-active','back-target'));
+  if (toZone && toZone !== touchCard.zone) { dragIdx = touchCard.idx; dragFrom = touchCard.zone; onDrop({preventDefault:()=>{}}, toZone); }
+  touchCard = null; touchLastZone = null;
+});
+
+function revealAll() {
+  if (splitDone) return;
+  myHand.forEach((_,i) => revealed.add(i));
+  renderAllZones();
+}
+
+
 function confirmSplit() {
-  const frontCards = frontSel.map(k => k.split(':')[0]);
-  const backCards  = myHand.filter((c, i) => !frontSel.includes(c + ':' + i));
-  if (frontCards.length !== 2 || backCards.length !== 3) return;
-  socket.emit('submit_split', { room: myRoom, front: frontCards, back: backCards });
+  if (frontIdxs.length !== 2 || backIdxs.length !== 3) return;
+  const front = frontIdxs.map(i => myHand[i]);
+  const back  = backIdxs.map(i => myHand[i]);
+  socket.emit('submit_split', { room: myRoom, front, back });
   splitDone = true;
-  // Show waiting state
   hide('zone-split');
   show('zone-split-wait');
-  document.getElementById('split-wait-msg').textContent =
-    'Split confirmed. Waiting for other players…';
-  // Show my split preview locked in
-  renderMySplitPreview(frontCards, backCards);
+  document.getElementById('split-wait-msg').textContent = 'Split confirmed. Waiting for other players…';
+  renderMySplitPreview(front, back);
 }
 
 function renderMySplitPreview(front, back) {
-  document.getElementById('my-front-display').innerHTML =
-    front.map(c => `<div>${cardHtml(c)}</div>`).join('');
-  document.getElementById('my-back-display').innerHTML =
-    back.map(c => `<div>${cardHtml(c)}</div>`).join('');
+  document.getElementById('my-front-display').innerHTML = front.map(c => cardHtml(c)).join('');
+  document.getElementById('my-back-display').innerHTML  = back.map(c => cardHtml(c)).join('');
 }
 
 function onSplitReceived(d) {
@@ -1121,16 +1277,17 @@ function onAllSplit(d) {
   decisionQueue = d.queue;
   setPhaseBanner('Fold or play');
   gamePhase = 'fold_decision';
-  // Show my split locked-in display
+  hide('zone-split-wait');
+  hide('zone-split');
   show('zone-my-split');
   renderPlayersBar();
 }
 
 function onFoldPrompt(d) {
   stopTimer();
+  hide('zone-split-wait');
   renderPlayersBar();
   if (d.player === myId) {
-    // It's my turn
     hide('zone-spectating');
     show('zone-decision');
     document.getElementById('decision-header').textContent = 'Your turn — fold or play?';
@@ -1265,7 +1422,10 @@ function onRoundStarted(d) {
   hide('zone-decision');
   hide('zone-my-split');
   splitDone = false;
-  frontSel  = [];
+  handIdxs  = [];
+  frontIdxs = [];
+  backIdxs  = [];
+  revealed  = new Set();
   gamePhase = 'splitting';
   document.getElementById('top-round').textContent  = 'Round ' + d.round;
   document.getElementById('top-dealer').textContent = d.dealer;
