@@ -1269,7 +1269,7 @@ function renderMySplitPreview(front, back) {
 function onSplitReceived(d) {
   renderPlayersBar(d.waiting_for);
   if (d.player_id !== myId) {
-    toast(`${d.player_id} submitted their split`);
+    toast(`${d.player} submitted their split`);
   }
 }
 
