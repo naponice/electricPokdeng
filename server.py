@@ -114,7 +114,13 @@ rooms: Dict[str, RoomState] = {}
 
 app = Flask(__name__, static_folder="frontend", static_url_path="")
 app.config["SECRET_KEY"] = "change-me-in-production"
-socketio = SocketIO(app, async_mode="threading", cors_allowed_origins="*")
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*",
+    async_mode="eventlet",
+    ping_interval=25,
+    ping_timeout=20,
+)
 
 
 # ──────────────────────────────────────────────
