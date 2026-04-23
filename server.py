@@ -50,8 +50,8 @@ from flask_socketio import SocketIO, emit, join_room, leave_room
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
 
-from .card import Card, Rank, Suit, RANK_SYMBOLS, SUIT_SYMBOLS
-from .game import Game, GameError, BattleResult, RoundResult
+from engine.card import Card, Rank, Suit, RANK_SYMBOLS, SUIT_SYMBOLS
+from engine.game import Game, GameError, BattleResult, RoundResult
 
 
 # ──────────────────────────────────────────────
