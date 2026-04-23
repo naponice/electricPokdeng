@@ -51,7 +51,7 @@ import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
 
 from engine.card import Card, Rank, Suit, RANK_SYMBOLS, SUIT_SYMBOLS
-from engine.game import Game, GameError, BattleResult, RoundResult
+from engine.game import Game, GameError, BattleResult, RoundResult, Phase
 
 
 # ──────────────────────────────────────────────
@@ -114,13 +114,7 @@ rooms: Dict[str, RoomState] = {}
 
 app = Flask(__name__, static_folder="frontend", static_url_path="")
 app.config["SECRET_KEY"] = "change-me-in-production"
-socketio = SocketIO(
-    app,
-    cors_allowed_origins="*",
-    async_mode="eventlet",
-    ping_interval=25,
-    ping_timeout=20,
-)
+socketio = SocketIO(app, async_mode="threading", cors_allowed_origins="*")
 
 
 # ──────────────────────────────────────────────
@@ -518,9 +512,32 @@ def handle_disconnect():
         if player_id:
             rs.player_to_sid.pop(player_id, None)
 
-        # If it's their turn to decide, fold them immediately
         with rs.lock:
-            if rs.game.current_decision_player() == player_id:
+            # SPLITTING: auto-submit split so game isn't blocked
+            if rs.game.phase == Phase.SPLITTING:
+                try:
+                    player_obj = rs.game._get_player(player_id)
+                    if not player_obj.has_split and player_obj.hand:
+                        split_result = rs.game.submit_split(
+                            player_id,
+                            player_obj.hand[:2],
+                            player_obj.hand[2:],
+                        )
+                        socketio.emit("split_received", {
+                            "player":      player_id,
+                            "waiting_for": split_result.still_waiting,
+                        }, to=room_id)
+                        if split_result.all_split:
+                            socketio.emit("all_split", {
+                                "next_to_decide": split_result.next_to_decide,
+                                "queue":          rs.game._decision_queue,
+                            }, to=room_id)
+                            _prompt_next(room_id)
+                except GameError:
+                    pass
+
+            # FOLD_DECISION: auto-fold if it's their turn
+            elif rs.game.current_decision_player() == player_id:
                 try:
                     result = rs.game.auto_fold(player_id)
                     _cancel_timer(rs)
