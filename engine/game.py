@@ -19,8 +19,10 @@ Round lifecycle
 Scoring
 ───────
   Fold penalty (computed at end of round, once all decisions are in):
-    Each folder    loses  3 × (number of players who chose "play")
-    Each player    gains  3 × (total number of folders this round)
+    Stage 1 — Each folder loses  3 × (number of players who chose "play")
+              Each player gains  3 × (total number of folders this round)
+    Stage 2 — Among folders only: earlier folder in the decision queue pays 3
+              to each later folder (first-to-decide bears the most risk)
 
   Battle (round-robin among players who chose "play"):
     compare_trow + compare_brow → battle() → net point exchange per pair.
@@ -381,13 +383,18 @@ class Game:
         Compute fold penalties and run round-robin battles.
         Updates score_round and score_total on every player.
 
-        Fold rule: each folder pays 3 points to every player who chose "play".
-        Order in the decision queue does not affect the penalty.
+        Fold penalty — two stages:
+          Stage 1: each folder pays 3 per playing player; each player gains 3 per folder.
+          Stage 2: among folders, each earlier-position folder pays 3 to each later-position
+                   folder (seniority tax — first to decide is penalised most).
 
-        Example (queue: P1 -> P2 -> P3, P1 folds, P2 folds, P3 plays):
-          P1 folds -> pays 3 × 1 player(s) playing: P1 -3
-          P2 folds -> pays 3 × 1 player(s) playing: P2 -3
-          P3 plays -> gains 3 × 2 folder(s): P3 +6
+        Example (queue: P1→P2→P3):
+          P1 fold, P2 fold, P3 play:
+            Stage 1: P1=-3, P2=-3, P3=+6
+            Stage 2: P1 pays P2 → P1=-6, P2=0
+          P1 fold, P2 play, P3 fold:
+            Stage 1: P1=-3, P2=+6, P3=-3
+            Stage 2: P1 pays P3 → P1=-6, P3=0
         """
         play_players = [p for p in self._players if p.decision == "play"]
         fold_players = sorted(
@@ -396,13 +403,25 @@ class Game:
         )
 
         # ── Fold penalty scoring ───────────────
-        # Each folder pays 3 per playing player; each player gains 3 per folder.
+        # Stage 1: each folder pays 3 per playing player; each player gains 3 per folder.
         num_plays = len(play_players)
         num_folds = len(fold_players)
         for player in fold_players:
             player.score_round -= 3 * num_plays
         for player in play_players:
             player.score_round += 3 * num_folds
+
+        # Stage 2: earlier folder pays 3 to each later folder in the decision queue.
+        n = len(self._decision_queue)
+        for i, pid in enumerate(self._decision_queue):
+            folder_i = self._get_player(pid)
+            if folder_i.decision != "fold":
+                continue
+            for j in range(i + 1, n):
+                folder_j = self._get_player(self._decision_queue[j])
+                if folder_j.decision == "fold":
+                    folder_i.score_round -= 3
+                    folder_j.score_round += 3
 
         # ── Battle scoring (round-robin) ───────
         battles: List[BattleResult] = []
