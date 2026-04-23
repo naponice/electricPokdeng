@@ -1033,6 +1033,9 @@ function nextRound()  { socket.emit('next_round',  { room: myRoom }); hide('zone
 function onJoined(d) {
   players = d.players; scores = d.scores;
   if (d.reconnected) {
+    // Switch to game screen immediately — game_state + deal_cards arrive right after
+    showScreen('game');
+    document.getElementById('top-room').textContent = 'ROOM: ' + myRoom;
     toast('Back in the game');
     return;
   }
@@ -1550,10 +1553,22 @@ function onRoundStarted(d) {
 }
 
 function onGameState(d) {
-  // Reconnected — rebuild state
-  players   = d.players;
-  gamePhase = d.phase.toLowerCase();
-  setPhaseBanner(d.phase);
+  // Reconnected — rebuild UI from snapshot
+  if (d.players) players = d.players;
+  gamePhase = (d.phase || '').toLowerCase();
+
+  // Populate top bar (snapshot includes round_number and dealer_id)
+  if (d.round_number) document.getElementById('top-round').textContent  = 'Round ' + d.round_number;
+  if (d.dealer_id)    document.getElementById('top-dealer').textContent = d.dealer_id;
+
+  // Phase-appropriate banner
+  const bannerMap = {
+    'SPLITTING':     'Splitting hands…',
+    'FOLD_DECISION': 'Fold or play',
+    'ROUND_END':     'Round over',
+    'WAITING':       'Waiting',
+  };
+  setPhaseBanner(bannerMap[d.phase] || d.phase || 'In progress');
   renderPlayersBar();
 }
 
