@@ -50,8 +50,8 @@ from flask_socketio import SocketIO, emit, join_room, leave_room
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
 
-from engine.card import Card, Rank, Suit, RANK_SYMBOLS, SUIT_SYMBOLS
-from engine.game import Game, GameError, BattleResult, RoundResult
+from .card import Card, Rank, Suit, RANK_SYMBOLS, SUIT_SYMBOLS
+from .game import Game, GameError, BattleResult, RoundResult
 
 
 # ──────────────────────────────────────────────
@@ -95,12 +95,13 @@ TURN_SECONDS = 60    # seconds per fold/play decision
 
 @dataclass
 class RoomState:
-    game:           Game
-    sid_to_player:  Dict[str, str]          = field(default_factory=dict)
-    player_to_sid:  Dict[str, str]          = field(default_factory=dict)
-    lock:           threading.Lock          = field(default_factory=threading.Lock)
-    timer:          Optional[threading.Timer] = None
-    game_started:   bool                    = False
+    game:            Game
+    sid_to_player:   Dict[str, str]           = field(default_factory=dict)
+    player_to_sid:   Dict[str, str]           = field(default_factory=dict)
+    lock:            threading.Lock           = field(default_factory=threading.Lock)
+    timer:           Optional[threading.Timer] = None
+    game_started:    bool                     = False
+    waiting_players: List[str]                = field(default_factory=list)
 
 
 # Keyed by room_id string
@@ -113,13 +114,7 @@ rooms: Dict[str, RoomState] = {}
 
 app = Flask(__name__, static_folder="frontend", static_url_path="")
 app.config["SECRET_KEY"] = "change-me-in-production"
-socketio = SocketIO(
-    app,
-    cors_allowed_origins="*",
-    async_mode="eventlet",       # must match your gunicorn worker
-    ping_interval=25,            # send ping every 25s (under Render's 30s cutoff)
-    ping_timeout=20,             # wait 20s for pong before disconnecting
-)
+socketio = SocketIO(app, async_mode="threading", cors_allowed_origins="*")
 
 
 # ──────────────────────────────────────────────
@@ -256,28 +251,25 @@ def handle_join(data):
     rs = rooms[room_id]
 
     with rs.lock:
-        already_in_game = any(p.player_id == player_id for p in rs.game.players)
+        already_active  = any(p.player_id == player_id for p in rs.game.players)
+        already_waiting = player_id in rs.waiting_players
 
-        # ── Reconnection path ────────────────────────────────
-        if already_in_game:
-            # Update SID mapping for the new connection
+        # ── Reconnection: player is already in the game ────────────────
+        if already_active:
             old_sid = rs.player_to_sid.get(player_id)
             if old_sid:
                 rs.sid_to_player.pop(old_sid, None)
             rs.sid_to_player[request.sid] = player_id
             rs.player_to_sid[player_id]   = request.sid
             join_room(room_id)
-
             emit("joined", {
-                "room":           room_id,
-                "your_player_id": player_id,
-                "players":        [{"player_id": p.player_id, "seat": p.seat} for p in rs.game.players],
-                "scores":         rs.game.get_scores(),
-                "reconnected":    True,
+                "room":            room_id,
+                "your_player_id":  player_id,
+                "players":         [{"player_id": p.player_id, "seat": p.seat} for p in rs.game.players],
+                "scores":          rs.game.get_scores(),
+                "reconnected":     True,
             })
-            # Resend game state snapshot
             emit("game_state", rs.game.get_state_snapshot())
-            # Resend their private hand
             try:
                 player = rs.game._get_player(player_id)
                 if player.hand:
@@ -285,9 +277,53 @@ def handle_join(data):
             except GameError:
                 pass
             return
-        # ── New player path (unchanged below) ─────────────────
-        if rs.game_started:
-            return emit("error", {"message": "Game already in progress in this room."})
+
+        # ── Mid-game join: put player in the waiting room ──────────────
+        if rs.game_started and not already_waiting:
+            rs.waiting_players.append(player_id)
+            rs.sid_to_player[request.sid] = player_id
+            rs.player_to_sid[player_id]   = request.sid
+            join_room(room_id)
+            active_players = [{"player_id": p.player_id, "seat": p.seat} for p in rs.game.players]
+            emit("joined", {
+                "room":            room_id,
+                "your_player_id":  player_id,
+                "players":         active_players,
+                "scores":          rs.game.get_scores(),
+            })
+            emit("waiting_room", {
+                "players": active_players,
+                "scores":  rs.game.get_scores(),
+                "waiting": rs.waiting_players,
+            })
+            socketio.emit("player_waiting", {
+                "player_id": player_id,
+                "waiting":   rs.waiting_players,
+            }, to=room_id, include_self=False)
+            return
+
+        if rs.game_started and already_waiting:
+            # Reconnect of a waiting player — just refresh their sid
+            old_sid = rs.player_to_sid.get(player_id)
+            if old_sid:
+                rs.sid_to_player.pop(old_sid, None)
+            rs.sid_to_player[request.sid] = player_id
+            rs.player_to_sid[player_id]   = request.sid
+            join_room(room_id)
+            emit("joined", {
+                "room":            room_id,
+                "your_player_id":  player_id,
+                "players":         [{"player_id": p.player_id, "seat": p.seat} for p in rs.game.players],
+                "scores":          rs.game.get_scores(),
+            })
+            emit("waiting_room", {
+                "players": [{"player_id": p.player_id, "seat": p.seat} for p in rs.game.players],
+                "scores":  rs.game.get_scores(),
+                "waiting": rs.waiting_players,
+            })
+            return
+
+        # ── Normal pre-game join ───────────────────────────────────────
         try:
             rs.game.add_player(player_id)
         except GameError as e:
@@ -408,14 +444,35 @@ def handle_next_round(data):
     room_id = data["room"]
 
     with rs.lock:
+        # Admit waiting players into the game before dealing
+        newly_joined = []
+        for pid in list(rs.waiting_players):
+            try:
+                rs.game.add_player(pid)
+                rs.waiting_players.remove(pid)
+                newly_joined.append(pid)
+            except GameError:
+                pass
+
         try:
             deal = rs.game.next_round()
         except GameError as e:
             return emit("error", {"message": str(e)})
 
+    all_players = [{"player_id": p.player_id, "seat": p.seat} for p in rs.game.players]
+
+    # Notify newly added players they're in — they need to transition to game screen
+    for pid in newly_joined:
+        sid = rs.player_to_sid.get(pid)
+        if sid:
+            socketio.emit("joined_game", {
+                "players": all_players,
+            }, to=sid)
+
     socketio.emit("round_started", {
-        "round":  deal.round_number,
-        "dealer": deal.dealer_id,
+        "round":   deal.round_number,
+        "dealer":  deal.dealer_id,
+        "players": all_players,
     }, to=room_id)
 
     for pid, hand in deal.dealt_hands.items():
@@ -498,5 +555,4 @@ def health():
 # ──────────────────────────────────────────────
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5001))
-    socketio.run(app, debug=False, host="0.0.0.0", port=port)
+    socketio.run(app, debug=True, host="0.0.0.0", port=5000)
