@@ -194,8 +194,8 @@ class Game:
     # ── Player management ─────────────────────
 
     def add_player(self, player_id: str) -> Player:
-        """Add a player to the table.  Only allowed in WAITING phase."""
-        if self.phase != Phase.WAITING:
+        """Add a player to the table. Allowed in WAITING or ROUND_END phase."""
+        if self.phase not in (Phase.WAITING, Phase.ROUND_END):
             raise GameError("Players can only join between rounds.")
         if any(p.player_id == player_id for p in self._players):
             raise GameError(f"'{player_id}' is already at the table.")
