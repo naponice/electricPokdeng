@@ -226,6 +226,7 @@ input:focus { border-color: var(--gold-dim); }
 .dot-play   { background: #2980b9; }
 .dot-fold   { background: #7f8c8d; }
 .dot-turn   { background: var(--gold); }
+.dot-left   { background: #e74c3c; }
 .status-label {
   font-size: 0.65rem;
   color: var(--text-dim);
@@ -775,9 +776,12 @@ input:focus { border-color: var(--gold-dim); }
       <span class="room-badge" id="top-room"></span>
       <span class="round-badge" id="top-round">Round 1</span>
     </div>
-    <div class="dealer-badge">
-      <span class="dealer-chip">D</span>
-      <span id="top-dealer"></span>
+    <div style="display:flex;align-items:center;gap:1rem;">
+      <div class="dealer-badge">
+        <span class="dealer-chip">D</span>
+        <span id="top-dealer"></span>
+      </div>
+      <button class="btn btn-red" style="padding:0.35rem 0.85rem;font-size:0.75rem;" onclick="leaveRoom()">Leave</button>
     </div>
   </div>
 
@@ -924,6 +928,7 @@ let timerInterval = null;
 let timerSecs    = 60;
 let splitDone    = false;    // I have confirmed my split
 let isWaiting    = false;    // joined mid-game, waiting for next round
+let leftPlayers  = new Set(); // player_ids who intentionally left
 
 // ── Utilities ───────────────────────────────────────────────────────────────
 function show(id)  { document.getElementById(id).classList.remove('hidden'); }
@@ -1009,7 +1014,7 @@ function joinGame() {
   socket.on('error',      d  => toast(d.message, true));
   socket.on('joined',         onJoined);
   socket.on('player_joined',  onPlayerJoined);
-  socket.on('player_left',    d => toast(`${d.player_id} left`));
+  socket.on('player_left',    onPlayerLeft);
   socket.on('game_started',   onGameStarted);
   socket.on('deal_cards',     onDealCards);
   socket.on('split_received', onSplitReceived);
@@ -1530,12 +1535,13 @@ function onRoundStarted(d) {
   hide('zone-spectating');
   hide('zone-decision');
   hide('zone-my-split');
-  splitDone = false;
-  handIdxs  = [];
-  frontIdxs = [];
-  backIdxs  = [];
-  revealed  = new Set();
-  gamePhase = 'splitting';
+  splitDone   = false;
+  handIdxs    = [];
+  frontIdxs   = [];
+  backIdxs    = [];
+  revealed    = new Set();
+  leftPlayers = new Set();
+  gamePhase   = 'splitting';
   // Update player list (waiting players may have joined)
   if (d.players) players = d.players;
   document.getElementById('top-round').textContent  = 'Round ' + d.round;
@@ -1582,9 +1588,10 @@ function renderPlayersBar(waitingFor = null) {
   bar.innerHTML = players.map(p => {
     let dot = 'dot-wait', statusLabel = 'Waiting';
 
-    if (p.decision === 'fold') { dot = 'dot-fold'; statusLabel = 'Folded'; }
-    else if (p.decision === 'play') { dot = 'dot-play'; statusLabel = 'Playing'; }
-    else if (p.has_split === true) { dot = 'dot-split'; statusLabel = 'Split ✓'; }
+    if (leftPlayers.has(p.player_id))    { dot = 'dot-left'; statusLabel = 'Left'; }
+    else if (p.decision === 'fold')       { dot = 'dot-fold'; statusLabel = 'Folded'; }
+    else if (p.decision === 'play')       { dot = 'dot-play'; statusLabel = 'Playing'; }
+    else if (p.has_split === true)        { dot = 'dot-split'; statusLabel = 'Split ✓'; }
     else if (waitingFor && waitingFor.includes(p.player_id)) { dot = 'dot-wait'; statusLabel = 'Splitting…'; }
     else if (waitingFor && !waitingFor.includes(p.player_id) && gamePhase === 'splitting') {
       dot = 'dot-split'; statusLabel = 'Split ✓';
@@ -1647,6 +1654,22 @@ function updateTimerUI(remaining, total, barId, numId) {
 function stopTimer() {
   clearInterval(timerInterval);
   timerInterval = null;
+}
+
+function leaveRoom() {
+  if (!socket || !myRoom) return;
+  socket.emit('leave_game', { room: myRoom });
+  // Return to join screen
+  socket.disconnect();
+  socket = null;
+  showScreen('join');
+}
+
+function onPlayerLeft(d) {
+  leftPlayers.add(d.player_id);
+  renderPlayersBar();
+  const reason = d.intentional ? 'left the room' : 'disconnected';
+  toast(`${d.player_id} ${reason}`);
 }
 
 // ── Keyboard shortcut ────────────────────────────────────────────────────────

@@ -102,6 +102,7 @@ class RoomState:
     timer:           Optional[threading.Timer] = None
     game_started:    bool                     = False
     waiting_players: List[str]                = field(default_factory=list)
+    left_players:    set                      = field(default_factory=set)
 
 
 # Keyed by room_id string
@@ -368,6 +369,8 @@ def handle_start_game(data):
 
     # Send each player their PRIVATE hand — never broadcast all hands together
     for pid, hand in deal.dealt_hands.items():
+        if pid in rs.left_players:
+            continue   # don't deal to players who intentionally left
         sid = rs.player_to_sid.get(pid)
         if sid:
             socketio.emit("deal_cards", {"cards": cards_to_strs(hand)}, to=sid)
@@ -476,6 +479,8 @@ def handle_next_round(data):
     }, to=room_id)
 
     for pid, hand in deal.dealt_hands.items():
+        if pid in rs.left_players:
+            continue   # don't deal to players who intentionally left
         sid = rs.player_to_sid.get(pid)
         if sid:
             socketio.emit("deal_cards", {"cards": cards_to_strs(hand)}, to=sid)
@@ -500,6 +505,69 @@ def handle_request_state(data):
             emit("deal_cards", {"cards": cards_to_strs(player.hand)})
     except GameError:
         pass
+
+
+@socketio.on("leave_game")
+def handle_leave_game(data):
+    """
+    Player intentionally leaves. Mark them as left so they are skipped in
+    future rounds and their current-round action is resolved immediately.
+    """
+    rs, player_id = _resolve(data)
+    if rs is None:
+        return
+
+    room_id = data.get("room", "")
+    rs.left_players.add(player_id)
+
+    # Remove from waiting list if they were there
+    if player_id in rs.waiting_players:
+        rs.waiting_players.remove(player_id)
+
+    with rs.lock:
+        # SPLITTING: auto-submit so the round isn't blocked
+        if rs.game.phase == Phase.SPLITTING:
+            try:
+                player_obj = rs.game._get_player(player_id)
+                if not player_obj.has_split and player_obj.hand:
+                    split_result = rs.game.submit_split(
+                        player_id,
+                        player_obj.hand[:2],
+                        player_obj.hand[2:],
+                    )
+                    socketio.emit("split_received", {
+                        "player":      player_id,
+                        "waiting_for": split_result.still_waiting,
+                    }, to=room_id)
+                    if split_result.all_split:
+                        socketio.emit("all_split", {
+                            "next_to_decide": split_result.next_to_decide,
+                            "queue":          rs.game._decision_queue,
+                        }, to=room_id)
+                        _prompt_next(room_id)
+            except GameError:
+                pass
+
+        # FOLD_DECISION: auto-fold if it's their turn
+        elif rs.game.current_decision_player() == player_id:
+            try:
+                result = rs.game.auto_fold(player_id)
+                _cancel_timer(rs)
+                socketio.emit("player_decided",
+                              {"player": player_id, "decision": "fold"},
+                              to=room_id)
+                if result.round_result:
+                    socketio.emit("showdown", _round_dict(result.round_result, rs), to=room_id)
+                else:
+                    _prompt_next(room_id)
+            except GameError:
+                pass
+
+    # Broadcast left status — clients show red dot
+    socketio.emit("player_left", {
+        "player_id":   player_id,
+        "intentional": True,
+    }, to=room_id)
 
 
 @socketio.on("disconnect")
@@ -555,7 +623,10 @@ def handle_disconnect():
                     else:
                         _prompt_next(room_id)
 
-        socketio.emit("player_left", {"player_id": player_id}, to=room_id)
+        socketio.emit("player_left", {
+            "player_id":   player_id,
+            "intentional": False,
+        }, to=room_id)
         break
 
 
