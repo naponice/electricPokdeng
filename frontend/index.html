@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Pok Deng</title>
+<title>⚡️🃏Electric Pokdeng⚡️🃏</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=Kanit:wght@300;400;600&display=swap" rel="stylesheet">
 <style>
@@ -993,9 +993,15 @@ function joinGame() {
   const player = document.getElementById('input-player').value.trim();
   if (!room || !player) { toast('Enter room and name', true); return; }
   myId = player; myRoom = room;
-  socket = io(window.location.origin, { transports: ['websocket'] });
+  socket = io(window.location.origin, {
+    transports: ['websocket', 'polling'],
+    reconnection: true,
+    reconnectionAttempts: 10,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+  });
   socket.on('connect',    () => socket.emit('join', { room: myRoom, username: myId }));
-  socket.on('disconnect', () => toast('Disconnected from server', true));
+  socket.on('disconnect', () => toast('Connection lost — reconnecting…', true));
   socket.on('error',      d  => toast(d.message, true));
   socket.on('joined',         onJoined);
   socket.on('player_joined',  onPlayerJoined);
@@ -1009,6 +1015,10 @@ function joinGame() {
   socket.on('showdown',       onShowdown);
   socket.on('round_started',  onRoundStarted);
   socket.on('game_state',     onGameState);
+  socket.on('reconnect', () => {
+    toast('Reconnected — rejoining…');
+    socket.emit('join', { room: myRoom, username: myId });
+  });
 }
 function startGame() { socket.emit('start_game', { room: myRoom }); }
 function nextRound()  { socket.emit('next_round',  { room: myRoom }); hide('zone-showdown'); }
@@ -1016,6 +1026,10 @@ function nextRound()  { socket.emit('next_round',  { room: myRoom }); hide('zone
 // ── Event handlers ──────────────────────────────────────────────────────────
 function onJoined(d) {
   players = d.players; scores = d.scores;
+  if (d.reconnected) {
+    toast('Back in the game');
+    return;
+  }
   updateLobbyPlayers();
   showScreen('lobby');
   document.getElementById('btn-start').disabled = players.length < 2;
