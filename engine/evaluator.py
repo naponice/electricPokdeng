@@ -10,7 +10,7 @@ Hands are compared independently (trow vs trow, brow vs brow) in round-robin.
   Card point values:
     2–9  →  face value  |  10, J, Q, K  →  0  |  A  →  1  |  Joker  →  wildcard
 
-  Special "Pok" hands (score = 7.5, beat all normal scores):
+  Special "Pok" hands (score = 7.5, beat scores 0–7 but lose to 8 and 9):
     Pok face    — both cards are face cards (J/Q/K)
     Pok 55      — both cards score 5 (two 5s)
     Pok 10-10   — both cards are 10s
@@ -19,7 +19,7 @@ Hands are compared independently (trow vs trow, brow vs brow) in round-robin.
   Normal hand score  =  sum(card values) mod 10   (0–9)
 
   Tiebreakers (applied in this order):
-    1. Score       7.5 > 9 > 8 > … > 1 > 0
+    1. Score       9 > 8 > 7.5 > 7 > 6 > … > 1 > 0
     2. Pair        any pair beats no pair
     3. Suited      same suit beats mixed
     4. Kicker rank highest card value (2 < 3 < … < K < A)
