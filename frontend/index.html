@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>⚡️🃏Electric Pokdeng⚡️🃏</title>
+<title>Pok Deng</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=Kanit:wght@300;400;600&display=swap" rel="stylesheet">
 <style>
@@ -756,10 +756,13 @@ input:focus { border-color: var(--gold-dim); }
 <!-- ── LOBBY SCREEN ────────────────────────── -->
 <div id="lobby-screen" class="screen">
   <div class="lobby-card">
-    <div class="lobby-title">Waiting for players</div>
+    <div class="lobby-title" id="lobby-title">Waiting for players</div>
     <div id="lobby-players" class="lobby-players"></div>
     <p id="lobby-msg" class="waiting-msg">Share the room code with your friends.</p>
     <button id="btn-start" class="btn btn-gold" onclick="startGame()">Start Game</button>
+    <div id="waiting-badge" class="hidden" style="margin-top:1rem;padding:0.75rem 1rem;background:rgba(201,148,58,.08);border:1px solid var(--border);border-radius:10px;font-size:0.82rem;color:var(--text-dim);text-align:center;line-height:1.6;">
+      Game in progress — you will be dealt in automatically at the start of the next round.
+    </div>
   </div>
 </div>
 
@@ -920,12 +923,13 @@ let decisionQueue = [];
 let timerInterval = null;
 let timerSecs    = 60;
 let splitDone    = false;    // I have confirmed my split
+let isWaiting    = false;    // joined mid-game, waiting for next round
 
 // ── Utilities ───────────────────────────────────────────────────────────────
 function show(id)  { document.getElementById(id).classList.remove('hidden'); }
 function hide(id)  { document.getElementById(id).classList.add('hidden');    }
 function showScreen(name) {
-  ['join-screen','lobby-screen','game-screen'].forEach(s =>
+  ['join-screen','lobby-screen','game-screen','waiting-screen'].forEach(s =>
     document.getElementById(s).classList.remove('active')
   );
   document.getElementById(name + '-screen').classList.add('active');
@@ -1015,6 +1019,8 @@ function joinGame() {
   socket.on('showdown',       onShowdown);
   socket.on('round_started',  onRoundStarted);
   socket.on('game_state',     onGameState);
+  socket.on('waiting_room',   onWaitingRoom);
+  socket.on('joined_game',    onJoinedGame);
   socket.on('reconnect', () => {
     toast('Reconnected — rejoining…');
     socket.emit('join', { room: myRoom, username: myId });
@@ -1030,6 +1036,12 @@ function onJoined(d) {
     toast('Back in the game');
     return;
   }
+  // Reset waiting-room UI in case they were in waiting mode before
+  isWaiting = false;
+  document.getElementById('lobby-title').textContent = 'Waiting for players';
+  document.getElementById('lobby-msg').textContent   = 'Share the room code with your friends.';
+  document.getElementById('btn-start').classList.remove('hidden');
+  document.getElementById('waiting-badge').classList.add('hidden');
   updateLobbyPlayers();
   showScreen('lobby');
   document.getElementById('btn-start').disabled = players.length < 2;
@@ -1178,11 +1190,8 @@ function flipCard(idx, delay) {
     wrapper.classList.add('flipping');
     wrapper.querySelector('.card-inner').classList.add('revealed');
     wrapper.setAttribute('draggable', 'true');
-    // After animation (550ms), auto-assign and remove flipping class
-    setTimeout(() => {
-      wrapper.classList.remove('flipping');
-      if (!splitDone && handIdxs.includes(idx)) autoAssignCard(idx);
-    }, 560);
+    // Remove flipping class after animation — card stays in hand, user assigns manually
+    setTimeout(() => wrapper.classList.remove('flipping'), 560);
   };
   if (delay) setTimeout(doFlip, delay);
   else doFlip();
@@ -1491,6 +1500,28 @@ function renderShowdown(d) {
   </table>`;
 }
 
+function onWaitingRoom(d) {
+  isWaiting = true;
+  players   = d.players || players;
+  scores    = d.scores  || scores;
+  // Reuse lobby screen in "watching" mode
+  document.getElementById('lobby-title').textContent  = 'Game in progress';
+  document.getElementById('lobby-msg').textContent    = '';
+  document.getElementById('btn-start').classList.add('hidden');
+  document.getElementById('waiting-badge').classList.remove('hidden');
+  updateLobbyPlayers();
+  showScreen('lobby');
+}
+
+function onJoinedGame(d) {
+  // Server is about to send round_started + deal_cards — transition to game screen
+  isWaiting = false;
+  players   = d.players || players;
+  showScreen('game');
+  document.getElementById('top-room').textContent = 'ROOM: ' + myRoom;
+  // round_started will fire immediately after and fill in round/dealer/etc.
+}
+
 function onRoundStarted(d) {
   hide('zone-showdown');
   hide('zone-spectating');
@@ -1502,10 +1533,18 @@ function onRoundStarted(d) {
   backIdxs  = [];
   revealed  = new Set();
   gamePhase = 'splitting';
+  // Update player list (waiting players may have joined)
+  if (d.players) players = d.players;
   document.getElementById('top-round').textContent  = 'Round ' + d.round;
   document.getElementById('top-dealer').textContent = d.dealer;
   setPhaseBanner('Splitting hands…');
   players = players.map(p => ({ ...p, decision: null, has_split: false }));
+  if (isWaiting) {
+    // Rare: got round_started before joined_game — transition now
+    isWaiting = false;
+    showScreen('game');
+    document.getElementById('top-room').textContent = 'ROOM: ' + myRoom;
+  }
   renderPlayersBar();
   renderIdleScores();
 }
