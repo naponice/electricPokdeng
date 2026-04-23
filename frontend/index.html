@@ -929,6 +929,7 @@ let timerSecs    = 60;
 let splitDone    = false;    // I have confirmed my split
 let isWaiting    = false;    // joined mid-game, waiting for next round
 let leftPlayers  = new Set(); // player_ids who intentionally left
+let intentionalLeave = false; // set before socket.disconnect() to suppress reconnect toast
 
 // ── Utilities ───────────────────────────────────────────────────────────────
 function show(id)  { document.getElementById(id).classList.remove('hidden'); }
@@ -1010,7 +1011,7 @@ function joinGame() {
     reconnectionDelayMax: 5000,
   });
   socket.on('connect',    () => socket.emit('join', { room: myRoom, username: myId }));
-  socket.on('disconnect', () => toast('Connection lost — reconnecting…', true));
+  socket.on('disconnect', () => { if (!intentionalLeave) toast('Connection lost — reconnecting…', true); });
   socket.on('error',      d  => toast(d.message, true));
   socket.on('joined',         onJoined);
   socket.on('player_joined',  onPlayerJoined);
@@ -1540,7 +1541,7 @@ function onRoundStarted(d) {
   frontIdxs   = [];
   backIdxs    = [];
   revealed    = new Set();
-  leftPlayers = new Set();
+  leftPlayers = new Set(d.left_players || []);
   gamePhase   = 'splitting';
   // Update player list (waiting players may have joined)
   if (d.players) players = d.players;
@@ -1659,9 +1660,10 @@ function stopTimer() {
 function leaveRoom() {
   if (!socket || !myRoom) return;
   socket.emit('leave_game', { room: myRoom });
-  // Return to join screen
+  intentionalLeave = true;
   socket.disconnect();
   socket = null;
+  intentionalLeave = false;
   showScreen('join');
 }
 
