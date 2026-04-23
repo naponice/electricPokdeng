@@ -113,7 +113,13 @@ rooms: Dict[str, RoomState] = {}
 
 app = Flask(__name__, static_folder="frontend", static_url_path="")
 app.config["SECRET_KEY"] = "change-me-in-production"
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*",
+    async_mode="eventlet",       # must match your gunicorn worker
+    ping_interval=25,            # send ping every 25s (under Render's 30s cutoff)
+    ping_timeout=20,             # wait 20s for pong before disconnecting
+)
 
 
 # ──────────────────────────────────────────────
@@ -250,6 +256,36 @@ def handle_join(data):
     rs = rooms[room_id]
 
     with rs.lock:
+        already_in_game = any(p.player_id == player_id for p in rs.game.players)
+
+        # ── Reconnection path ────────────────────────────────
+        if already_in_game:
+            # Update SID mapping for the new connection
+            old_sid = rs.player_to_sid.get(player_id)
+            if old_sid:
+                rs.sid_to_player.pop(old_sid, None)
+            rs.sid_to_player[request.sid] = player_id
+            rs.player_to_sid[player_id]   = request.sid
+            join_room(room_id)
+
+            emit("joined", {
+                "room":           room_id,
+                "your_player_id": player_id,
+                "players":        [{"player_id": p.player_id, "seat": p.seat} for p in rs.game.players],
+                "scores":         rs.game.get_scores(),
+                "reconnected":    True,
+            })
+            # Resend game state snapshot
+            emit("game_state", rs.game.get_state_snapshot())
+            # Resend their private hand
+            try:
+                player = rs.game._get_player(player_id)
+                if player.hand:
+                    emit("deal_cards", {"cards": cards_to_strs(player.hand)})
+            except GameError:
+                pass
+            return
+        # ── New player path (unchanged below) ─────────────────
         if rs.game_started:
             return emit("error", {"message": "Game already in progress in this room."})
         try:
@@ -262,16 +298,12 @@ def handle_join(data):
         join_room(room_id)
 
     players = [{"player_id": p.player_id, "seat": p.seat} for p in rs.game.players]
-
-    # Tell the joiner their confirmed identity and full player list
     emit("joined", {
-        "room":          room_id,
+        "room":           room_id,
         "your_player_id": player_id,
-        "players":       players,
-        "scores":        rs.game.get_scores(),
+        "players":        players,
+        "scores":         rs.game.get_scores(),
     })
-
-    # Tell everyone else
     emit("player_joined", {"player_id": player_id, "players": players},
          to=room_id, include_self=False)
 
