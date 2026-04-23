@@ -929,7 +929,7 @@ let isWaiting    = false;    // joined mid-game, waiting for next round
 function show(id)  { document.getElementById(id).classList.remove('hidden'); }
 function hide(id)  { document.getElementById(id).classList.add('hidden');    }
 function showScreen(name) {
-  ['join-screen','lobby-screen','game-screen','waiting-screen'].forEach(s =>
+  ['join-screen','lobby-screen','game-screen'].forEach(s =>
     document.getElementById(s).classList.remove('active')
   );
   document.getElementById(name + '-screen').classList.add('active');
