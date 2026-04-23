@@ -473,9 +473,10 @@ def handle_next_round(data):
             }, to=sid)
 
     socketio.emit("round_started", {
-        "round":   deal.round_number,
-        "dealer":  deal.dealer_id,
-        "players": all_players,
+        "round":       deal.round_number,
+        "dealer":      deal.dealer_id,
+        "players":     all_players,
+        "left_players": list(rs.left_players),
     }, to=room_id)
 
     for pid, hand in deal.dealt_hands.items():
