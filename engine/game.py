@@ -298,7 +298,7 @@ class Game:
         player.back      = list(back)
         player.has_split = True
 
-        all_split = all(p.has_split for p in self._players)
+        all_split = all(p.has_split or not p.hand for p in self._players)
         if all_split:
             self._build_decision_queue()
             self.phase = Phase.FOLD_DECISION
@@ -487,7 +487,7 @@ class Game:
 
     def waiting_for_splits(self) -> List[str]:
         """Player IDs who have not yet submitted their split."""
-        return [p.player_id for p in self._players if not p.has_split]
+        return [p.player_id for p in self._players if p.hand and not p.has_split]
 
     def get_scores(self) -> Dict[str, int]:
         """Current lifetime scores for all players."""
