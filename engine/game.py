@@ -210,12 +210,29 @@ class Game:
         return player
 
     def remove_player(self, player_id: str) -> None:
-        """Remove a player.  Only allowed in WAITING phase."""
-        if self.phase != Phase.WAITING:
+        """Remove a player between rounds, preserving dealer order as much as possible."""
+        if self.phase not in (Phase.WAITING, Phase.ROUND_END):
             raise GameError("Players can only leave between rounds.")
+
+        removed_index = next(
+            (i for i, p in enumerate(self._players) if p.player_id == player_id),
+            None,
+        )
+        if removed_index is None:
+            raise GameError(f"'{player_id}' is not at this table.")
+
         self._players = [p for p in self._players if p.player_id != player_id]
         for i, p in enumerate(self._players):
             p.seat = i
+
+        if not self._players:
+            self.dealer_seat = 0
+            return
+
+        if removed_index < self.dealer_seat:
+            self.dealer_seat -= 1
+        elif removed_index == self.dealer_seat:
+            self.dealer_seat = (removed_index - 1) % len(self._players)
 
     @property
     def players(self) -> List[Player]:
@@ -244,6 +261,8 @@ class Game:
         """
         if self.phase != Phase.ROUND_END:
             raise GameError(f"next_round() called from phase {self.phase.name}.")
+        if len(self._players) < self.MIN_PLAYERS:
+            raise GameError(f"Need at least {self.MIN_PLAYERS} active players to continue.")
         self.dealer_seat  = (self.dealer_seat + 1) % len(self._players)
         self.round_number += 1
         return self._deal_round()

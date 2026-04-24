@@ -375,7 +375,7 @@ _HAND_STRENGTH = {
     "points":               5,
 }
 
-_HAND_MULTIPLIER = {0: 10, 1: 5, 2: 5, 3: 4, 4: 3, 5: 1}
+_HAND_MULTIPLIER = {0: 10, 1: 5, 2: 5, 3: 3, 4: 3, 5: 1}
 
 BROW_HAND_NAMES = {v: k.replace("_", " ") for k, v in _HAND_STRENGTH.items()}
 
