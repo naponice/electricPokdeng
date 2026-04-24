@@ -530,6 +530,12 @@ input:focus { border-color: var(--gold-dim); }
   flex-direction: column;
   gap: 1rem;
 }
+.showdown-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
 .showdown-title {
   font-family: 'Libre Baskerville', serif;
   font-size: 1.1rem;
@@ -578,43 +584,51 @@ input:focus { border-color: var(--gold-dim); }
   animation: summary-sheen 3.5s linear infinite, summary-pulse-gold 2.6s ease-in-out infinite;
 }
 .showdown-summary-card.effect-1 {
-  border-color: rgba(112, 219, 255, .48);
-  box-shadow: 0 0 0 1px rgba(112,219,255,.12), 0 0 30px rgba(67,181,255,.22), 0 0 66px rgba(67,181,255,.1), 0 14px 32px rgba(0,0,0,.24);
+  border-color: rgba(102, 227, 255, .52);
+  box-shadow: 0 0 0 1px rgba(102,227,255,.14), 0 0 34px rgba(67,181,255,.24), 0 0 72px rgba(67,181,255,.12), 0 14px 32px rgba(0,0,0,.24);
 }
 .showdown-summary-card.effect-1::before {
   opacity: .95;
   background:
-    radial-gradient(circle at 50% 14%, rgba(129,220,255,.28) 0%, rgba(129,220,255,0) 48%),
-    linear-gradient(180deg, rgba(129,220,255,.06) 0%, rgba(129,220,255,0) 70%);
+    radial-gradient(circle at 50% 14%, rgba(129,220,255,.34) 0%, rgba(129,220,255,0) 48%),
+    linear-gradient(180deg, rgba(129,220,255,.08) 0%, rgba(129,220,255,0) 70%);
   animation: summary-pulse-cool 3s ease-in-out infinite;
 }
 .showdown-summary-card.effect-2 {
-  border-color: rgba(255, 161, 95, .45);
-  box-shadow: 0 0 0 1px rgba(255,161,95,.12), 0 0 24px rgba(255,145,77,.18), 0 0 56px rgba(255,145,77,.08), 0 14px 32px rgba(0,0,0,.24);
+  border-color: rgba(255, 102, 122, .52);
+  box-shadow: 0 0 0 1px rgba(255,102,122,.14), 0 0 30px rgba(255,88,116,.22), 0 0 64px rgba(255,88,116,.1), 0 14px 32px rgba(0,0,0,.24);
 }
 .showdown-summary-card.effect-2::before {
-  opacity: .84;
+  opacity: .88;
   background:
-    radial-gradient(circle at 50% 16%, rgba(255,168,112,.24) 0%, rgba(255,168,112,0) 50%),
-    linear-gradient(180deg, rgba(255,168,112,.05) 0%, rgba(255,168,112,0) 70%);
+    radial-gradient(circle at 50% 16%, rgba(255,122,142,.28) 0%, rgba(255,122,142,0) 50%),
+    linear-gradient(180deg, rgba(255,122,142,.08) 0%, rgba(255,122,142,0) 70%);
   animation: summary-pulse-warm 3.2s ease-in-out infinite;
 }
 .showdown-summary-card.effect-3 {
-  border-color: rgba(220, 168, 255, .38);
-  box-shadow: 0 0 0 1px rgba(220,168,255,.1), 0 0 20px rgba(181,127,240,.14), 0 0 46px rgba(181,127,240,.06), 0 12px 30px rgba(0,0,0,.22);
+  border-color: rgba(198, 133, 255, .44);
+  box-shadow: 0 0 0 1px rgba(198,133,255,.12), 0 0 24px rgba(181,127,240,.16), 0 0 52px rgba(181,127,240,.08), 0 12px 30px rgba(0,0,0,.22);
 }
 .showdown-summary-card.effect-3::before {
-  opacity: .74;
-  background: radial-gradient(circle at 50% 14%, rgba(211,169,255,.2) 0%, rgba(211,169,255,0) 48%);
+  opacity: .78;
+  background: radial-gradient(circle at 50% 14%, rgba(211,169,255,.24) 0%, rgba(211,169,255,0) 48%);
   animation: summary-pulse-violet 3.4s ease-in-out infinite;
 }
 .showdown-summary-card.effect-4 {
-  border-color: rgba(108, 207, 147, .34);
-  box-shadow: 0 0 0 1px rgba(108,207,147,.1), 0 0 16px rgba(108,207,147,.12), 0 10px 26px rgba(0,0,0,.2);
+  border-color: rgba(116, 227, 149, .4);
+  box-shadow: 0 0 0 1px rgba(116,227,149,.12), 0 0 20px rgba(108,207,147,.14), 0 0 42px rgba(108,207,147,.08), 0 10px 26px rgba(0,0,0,.2);
 }
 .showdown-summary-card.effect-4::before {
-  opacity: .64;
-  background: radial-gradient(circle at 50% 12%, rgba(108,207,147,.12) 0%, rgba(108,207,147,0) 44%);
+  opacity: .7;
+  background: radial-gradient(circle at 50% 12%, rgba(108,207,147,.16) 0%, rgba(108,207,147,0) 44%);
+}
+.showdown-summary-card.effect-5 {
+  border-color: rgba(121, 181, 166, .34);
+  box-shadow: 0 0 0 1px rgba(121,181,166,.1), 0 0 14px rgba(121,181,166,.12), 0 0 28px rgba(121,181,166,.06), 0 10px 24px rgba(0,0,0,.2);
+}
+.showdown-summary-card.effect-5::before {
+  opacity: .56;
+  background: radial-gradient(circle at 50% 12%, rgba(121,181,166,.12) 0%, rgba(121,181,166,0) 44%);
 }
 .showdown-summary-card .mini-card {
   transition: transform .22s ease, box-shadow .22s ease, filter .22s ease;
@@ -624,16 +638,19 @@ input:focus { border-color: var(--gold-dim); }
   filter: saturate(1.08);
 }
 .showdown-summary-card.effect-1 .mini-card {
-  box-shadow: 0 0 12px rgba(112,219,255,.18), 0 2px 8px rgba(0,0,0,.42);
+  box-shadow: 0 0 14px rgba(112,219,255,.2), 0 2px 8px rgba(0,0,0,.42);
 }
 .showdown-summary-card.effect-2 .mini-card {
-  box-shadow: 0 0 10px rgba(255,161,95,.16), 0 2px 8px rgba(0,0,0,.4);
+  box-shadow: 0 0 12px rgba(255,102,122,.18), 0 2px 8px rgba(0,0,0,.4);
 }
 .showdown-summary-card.effect-3 .mini-card {
-  box-shadow: 0 0 9px rgba(220,168,255,.13), 0 2px 8px rgba(0,0,0,.4);
+  box-shadow: 0 0 10px rgba(220,168,255,.15), 0 2px 8px rgba(0,0,0,.4);
 }
 .showdown-summary-card.effect-4 .mini-card {
-  box-shadow: 0 0 8px rgba(108,207,147,.12), 0 2px 8px rgba(0,0,0,.38);
+  box-shadow: 0 0 9px rgba(108,207,147,.14), 0 2px 8px rgba(0,0,0,.38);
+}
+.showdown-summary-card.effect-5 .mini-card {
+  box-shadow: 0 0 7px rgba(121,181,166,.12), 0 2px 8px rgba(0,0,0,.36);
 }
 .summary-head {
   display: flex;
@@ -779,10 +796,10 @@ input:focus { border-color: var(--gold-dim); }
   box-shadow: 0 0 14px rgba(112,219,255,.12);
 }
 .summary-strength-badge.effect-2 {
-  color: #ffc49b;
-  border-color: rgba(255,161,95,.34);
-  background: rgba(255,161,95,.12);
-  box-shadow: 0 0 12px rgba(255,161,95,.1);
+  color: #ffb4c2;
+  border-color: rgba(255,102,122,.34);
+  background: rgba(255,102,122,.12);
+  box-shadow: 0 0 12px rgba(255,102,122,.1);
 }
 .summary-strength-badge.effect-3 {
   color: #ddb5ff;
@@ -793,6 +810,11 @@ input:focus { border-color: var(--gold-dim); }
   color: #9fe2b6;
   border-color: rgba(108,207,147,.28);
   background: rgba(108,207,147,.1);
+}
+.summary-strength-badge.effect-5 {
+  color: #a9d6c9;
+  border-color: rgba(121,181,166,.28);
+  background: rgba(121,181,166,.1);
 }
 .summary-hand-row {
   display: flex;
@@ -1211,12 +1233,12 @@ input:focus { border-color: var(--gold-dim); }
     <!-- Showdown results -->
     <div id="zone-showdown" class="showdown-section hidden">
       <div id="showdown-summary-grid" class="showdown-summary-grid"></div>
-      <div class="showdown-title">Showdown</div>
+      <div class="showdown-topbar">
+        <div class="showdown-title">Showdown</div>
+        <button class="btn btn-gold" style="width:auto;padding:0.7rem 1.2rem;" onclick="nextRound()">Next Round</button>
+      </div>
       <div id="battles-container"></div>
       <div class="score-section" id="score-section" style="margin-top:0.5rem"></div>
-      <div style="margin-top:1rem;display:flex;gap:1rem;justify-content:center;">
-        <button class="btn btn-gold" onclick="nextRound()">Next Round</button>
-      </div>
     </div>
 
     <!-- Idle score display (lobby / between actions) -->

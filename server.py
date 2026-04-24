@@ -156,8 +156,7 @@ def _round_dict(rr: RoundResult, rs) -> dict:
     for p in rs.game._players:
         reveal_cards = p.decision == "play" or p.reveal_on_fold
         back_strength_bucket, back_strength_name = hand_strength_brow(p.back) if (p.back and reveal_cards) else (5, "")
-        back_has_joker = any(card.is_joker for card in p.back)
-        back_effect_tier = 0 if (reveal_cards and back_has_joker and back_strength_bucket == 2) else back_strength_bucket
+        back_effect_tier = back_strength_bucket
         player_summaries.append({
             "player_id": p.player_id,
             "decision": p.decision,
