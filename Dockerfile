@@ -12,4 +12,4 @@ ENV PORT=8080
 
 EXPOSE 8080
 
-CMD ["sh", "-c", "gunicorn -k eventlet -w 1 -b 0.0.0.0:${PORT} server:app"]
+CMD ["sh", "-c", "gunicorn -w 1 --threads 100 -b 0.0.0.0:${PORT} server:app"]
