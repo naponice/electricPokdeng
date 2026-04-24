@@ -337,6 +337,18 @@ input:focus { border-color: var(--gold-dim); }
   border: 2px solid var(--gold);
   color: var(--gold);
 }
+.card-face.joker-image {
+  padding: 0;
+  overflow: hidden;
+  background: #f7f0de;
+  border: 2px solid var(--gold);
+}
+.card-face.joker-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
 .card-corner {
   position: absolute;
   font-family: 'Libre Baskerville', serif;
@@ -1064,6 +1076,18 @@ input:focus { border-color: var(--gold-dim); }
 .mini-card.red  { color: var(--card-red); }
 .mini-card.black { color: var(--card-black); }
 .mini-card.joker { border: 1.5px solid var(--gold); color: var(--gold); background: linear-gradient(135deg, #fef9f0 0%, #fdf0c8 100%); }
+.mini-card.joker-image {
+  padding: 0;
+  overflow: hidden;
+  border: 1.5px solid var(--gold);
+  background: #f7f0de;
+}
+.mini-card.joker-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
 .mini-card.hidden-card {
   background:
     linear-gradient(135deg, rgba(201,148,58,.24) 0%, rgba(26,53,32,.95) 100%),
@@ -1298,13 +1322,12 @@ function toast(msg, isError = false) {
 // ── Card rendering ──────────────────────────────────────────────────────────
 const SUIT_SYM = { s: '♠', h: '♥', d: '♦', c: '♣' };
 const SUIT_CLS = { s: 'black', h: 'red', d: 'red', c: 'black' };
+const JOKER_IMAGE_SRC = '/assets/joker.png';
 
 function cardFaceHtml(cardStr) {
   if (cardStr === 'JK') {
-    return `<div class="card-face joker">
-      <div class="card-corner top-left"><span class="c-rank">J</span><span class="c-suit">★</span></div>
-      <div class="card-center-suit">★</div>
-      <div class="card-corner bot-right"><span class="c-rank">K</span></div>
+    return `<div class="card-face joker-image">
+      <img src="${JOKER_IMAGE_SRC}" alt="Joker card">
     </div>`;
   }
   const suit = cardStr.slice(-1);
@@ -1317,7 +1340,7 @@ function cardFaceHtml(cardStr) {
 }
 
 function miniCardHtml(cardStr) {
-  if (cardStr === 'JK') return `<div class="mini-card joker"><span class="mc-rank">JK</span><span class="mc-suit">★</span></div>`;
+  if (cardStr === 'JK') return `<div class="mini-card joker-image"><img src="${JOKER_IMAGE_SRC}" alt="Joker card"></div>`;
   const suit = cardStr.slice(-1);
   const rank = cardStr.slice(0, -1) === 'T' ? '10' : cardStr.slice(0, -1);
   return `<div class="mini-card ${SUIT_CLS[suit]}"><span class="mc-rank">${rank}</span><span class="mc-suit">${SUIT_SYM[suit]}</span></div>`;
