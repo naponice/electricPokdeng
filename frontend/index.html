@@ -207,6 +207,10 @@ input:focus { border-color: var(--gold-dim); }
   transition: border-color .2s, background .2s;
 }
 .player-chip.me { border-color: var(--gold-dim); }
+.player-chip.left {
+  border-color: rgba(192,57,43,.4);
+  background: rgba(92,26,26,.28);
+}
 .player-chip.active-turn {
   border-color: var(--gold);
   background: rgba(201,148,58,.12);
@@ -1241,11 +1245,6 @@ input:focus { border-color: var(--gold-dim); }
       <div class="score-section" id="score-section" style="margin-top:0.5rem"></div>
     </div>
 
-    <!-- Idle score display (lobby / between actions) -->
-    <div id="zone-scores" class="score-section hidden">
-      <table class="score-table" id="scores-idle-table"></table>
-    </div>
-
   </div><!-- .game-main -->
 </div><!-- #game-screen -->
 
@@ -1272,8 +1271,14 @@ let leftPlayers  = new Set(); // player_ids who intentionally left
 let intentionalLeave = false; // set before socket.disconnect() to suppress reconnect toast
 
 // ── Utilities ───────────────────────────────────────────────────────────────
-function show(id)  { document.getElementById(id).classList.remove('hidden'); }
-function hide(id)  { document.getElementById(id).classList.add('hidden');    }
+function show(id)  {
+  const el = document.getElementById(id);
+  if (el) el.classList.remove('hidden');
+}
+function hide(id)  {
+  const el = document.getElementById(id);
+  if (el) el.classList.add('hidden');
+}
 function showScreen(name) {
   ['join-screen','lobby-screen','game-screen'].forEach(s =>
     document.getElementById(s).classList.remove('active')
@@ -1390,7 +1395,7 @@ function nextRound()  { socket.emit('next_round',  { room: myRoom }); hide('zone
 
 // ── Event handlers ──────────────────────────────────────────────────────────
 function onJoined(d) {
-  players = d.players; scores = d.scores;
+  players = d.players; scores = d.scores; leftPlayers = new Set(d.left_players || []);
   if (d.reconnected) {
     // Switch to game screen immediately — game_state + deal_cards arrive right after
     showScreen('game');
@@ -1410,6 +1415,7 @@ function onJoined(d) {
 }
 function onPlayerJoined(d) {
   players = d.players;
+  leftPlayers.delete(d.player_id);
   updateLobbyPlayers();
   document.getElementById('btn-start').disabled = players.length < 2;
   toast(`${d.player_id} joined`);
@@ -1433,7 +1439,6 @@ function onGameStarted(d) {
   gamePhase = 'splitting';
   splitDone = false;
   renderPlayersBar();
-  renderIdleScores();
 }
 function onDealCards(d) {
   myHand = d.cards;
@@ -1451,7 +1456,7 @@ function renderSplitUI() {
   hide('zone-split-wait'); hide('zone-my-split');
   hide('zone-showdown');   hide('zone-decision');
   hide('zone-spectating');
-  show('zone-split');      show('zone-scores');
+  show('zone-split');
   renderAllZones();
 }
 
@@ -1933,6 +1938,7 @@ function onWaitingRoom(d) {
   isWaiting = true;
   players   = d.players || players;
   scores    = d.scores  || scores;
+  leftPlayers = new Set(d.left_players || leftPlayers);
   // Reuse lobby screen in "watching" mode
   document.getElementById('lobby-title').textContent  = 'Game in progress';
   document.getElementById('lobby-msg').textContent    = '';
@@ -1976,7 +1982,6 @@ function onRoundStarted(d) {
     document.getElementById('top-room').textContent = 'ROOM: ' + myRoom;
   }
   renderPlayersBar();
-  renderIdleScores();
 }
 
 function onGameState(d) {
@@ -2006,7 +2011,15 @@ function setPhaseBanner(text) {
 
 function renderPlayersBar(waitingFor = null) {
   const bar = document.getElementById('players-bar');
-  bar.innerHTML = players.map(p => {
+  const activeMap = new Map(players.map(p => [p.player_id, p]));
+  const allIds = Array.from(new Set([
+    ...players.map(p => p.player_id),
+    ...Object.keys(scores || {}),
+    ...Array.from(leftPlayers),
+  ])).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+
+  bar.innerHTML = allIds.map(playerId => {
+    const p = activeMap.get(playerId) || { player_id: playerId };
     let dot = 'dot-wait', statusLabel = 'Waiting';
 
     if (leftPlayers.has(p.player_id))    { dot = 'dot-left'; statusLabel = 'Left'; }
@@ -2025,7 +2038,7 @@ function renderPlayersBar(waitingFor = null) {
         !players.find(pl => pl.player_id === id && pl.decision !== null)
       );
 
-    return `<div class="player-chip ${p.player_id === myId ? 'me' : ''} ${activeTurn ? 'active-turn' : ''}">
+    return `<div class="player-chip ${p.player_id === myId ? 'me' : ''} ${leftPlayers.has(p.player_id) ? 'left' : ''} ${activeTurn ? 'active-turn' : ''}">
       <div class="status-dot ${dot}"></div>
       <span class="player-name">${p.player_id}</span>
       <span class="player-score">${scores[p.player_id] ?? 0}</span>
@@ -2037,23 +2050,6 @@ function renderPlayersBar(waitingFor = null) {
 function decisionLabel(decision) {
   if (decision === 'fold_reveal') return 'fold and reveal';
   return decision || '';
-}
-
-function renderIdleScores() {
-  const el = document.getElementById('scores-idle-table');
-  if (!el) return;
-  const sorted = [...players].sort((a, b) =>
-    (scores[b.player_id] || 0) - (scores[a.player_id] || 0)
-  );
-  const section = document.getElementById('zone-scores');
-  section.innerHTML = `<table class="score-table">
-    <thead><tr><th>Player</th><th>Score</th></tr></thead>
-    <tbody>${sorted.map(p => `<tr class="${p.player_id === myId ? 'me-row' : ''}">
-      <td class="score-name">${p.player_id}</td>
-      <td class="score-total">${scores[p.player_id] || 0}</td>
-    </tr>`).join('')}</tbody>
-  </table>`;
-  show('zone-scores');
 }
 
 // ── Timer ────────────────────────────────────────────────────────────────────

@@ -193,7 +193,6 @@ def _remove_left_players_for_next_round(rs: RoomState) -> None:
         try:
             player = rs.game._get_player(player_id)
         except GameError:
-            rs.left_players.discard(player_id)
             continue
 
         rs.archived_scores[player_id] = player.score_total
@@ -204,7 +203,6 @@ def _remove_left_players_for_next_round(rs: RoomState) -> None:
             rs.game.remove_player(player_id)
         except GameError:
             continue
-        rs.left_players.discard(player_id)
 
 
 # ──────────────────────────────────────────────
@@ -315,6 +313,7 @@ def handle_join(data):
                 "your_player_id":  player_id,
                 "players":         [{"player_id": p.player_id, "seat": p.seat} for p in rs.game.players],
                 "scores":          _room_scores(rs),
+                "left_players":    list(rs.left_players),
                 "reconnected":     True,
             })
             emit("game_state", rs.game.get_state_snapshot())
@@ -338,11 +337,13 @@ def handle_join(data):
                 "your_player_id":  player_id,
                 "players":         active_players,
                 "scores":          _room_scores(rs),
+                "left_players":    list(rs.left_players),
             })
             emit("waiting_room", {
                 "players": active_players,
                 "scores":  _room_scores(rs),
                 "waiting": rs.waiting_players,
+                "left_players": list(rs.left_players),
             })
             socketio.emit("player_waiting", {
                 "player_id": player_id,
@@ -363,11 +364,13 @@ def handle_join(data):
                 "your_player_id":  player_id,
                 "players":         [{"player_id": p.player_id, "seat": p.seat} for p in rs.game.players],
                 "scores":          _room_scores(rs),
+                "left_players":    list(rs.left_players),
             })
             emit("waiting_room", {
                 "players": [{"player_id": p.player_id, "seat": p.seat} for p in rs.game.players],
                 "scores":  _room_scores(rs),
                 "waiting": rs.waiting_players,
+                "left_players": list(rs.left_players),
             })
             return
 
@@ -376,6 +379,7 @@ def handle_join(data):
             player = rs.game.add_player(player_id)
             if player_id in rs.archived_scores:
                 player.score_total = rs.archived_scores.pop(player_id)
+            rs.left_players.discard(player_id)
         except GameError as e:
             return emit("error", {"message": str(e)})
 
@@ -389,6 +393,7 @@ def handle_join(data):
         "your_player_id": player_id,
         "players":        players,
         "scores":         _room_scores(rs),
+        "left_players":   list(rs.left_players),
     })
     emit("player_joined", {"player_id": player_id, "players": players},
          to=room_id, include_self=False)
