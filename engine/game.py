@@ -10,7 +10,7 @@ Round lifecycle
   SPLITTING     Every player privately picks their 2-card front and 3-card back.
                 Submissions are simultaneous — anyone can submit in any order.
                 Phase ends automatically once every player has submitted.
-  FOLD_DECISION One player at a time decides: fold or play.
+  FOLD_DECISION One player at a time decides: play, fold, or fold and reveal.
                 Order: left of dealer → clockwise → dealer is last.
                 The server is responsible for the per-player timer; if the
                 timer fires it calls game.auto_fold(player_id).
@@ -75,8 +75,9 @@ class Player:
     front:      List[Card] = field(default_factory=list)   # 2-card split
     back:       List[Card] = field(default_factory=list)   # 3-card split
     has_split:  bool = False
-    decision:   Optional[str] = None    # None | "fold" | "play"
+    decision:   Optional[str] = None    # None | "fold" | "fold_reveal" | "play"
     fold_order: Optional[int] = None   # 0-indexed position among folders
+    reveal_on_fold: bool = False
 
     # Running score
     score_total: int = 0
@@ -105,6 +106,7 @@ class BattleResult:
     p1_back_label:  str = ""
     p2_front_label: str = ""
     p2_back_label:  str = ""
+    darby:          bool = False    # True if Darby doubled this battle's points
 
 
 @dataclass
@@ -114,6 +116,7 @@ class RoundResult:
     battles:         List[BattleResult]
     play_player_ids: List[str]
     fold_player_ids: List[str]         # in fold order (earliest folder first)
+    darby_winner_id: Optional[str]     # player who swept the whole table with all players in
     score_deltas:    Dict[str, int]    # player_id → points earned this round
     scores:          Dict[str, int]    # player_id → lifetime total after this round
 
@@ -139,7 +142,7 @@ class SplitResult:
 class DecisionResult:
     """Returned by submit_decision() and auto_fold()."""
     player_id:     str
-    decision:      str                    # "fold" | "play"
+    decision:      str                    # "fold" | "fold_reveal" | "play"
     next_to_decide: Optional[str]         # None when all decisions are in
     round_result:  Optional[RoundResult]  # populated only on the last decision
 
@@ -254,6 +257,7 @@ class Game:
             p.has_split  = False
             p.decision   = None
             p.fold_order = None
+            p.reveal_on_fold = False
             p.score_round = 0
 
         self._decision_queue = []
@@ -330,15 +334,17 @@ class Game:
 
     def submit_decision(self, player_id: str, decision: str) -> DecisionResult:
         """
-        Record a 'fold' or 'play' decision for the current player in the queue.
+        Record a 'play', 'fold', or 'fold_reveal' decision for the current player.
         Raises GameError if called out of turn or in the wrong phase.
         When the last player decides, the showdown runs automatically and
         DecisionResult.round_result is populated.
         """
         if self.phase != Phase.FOLD_DECISION:
             raise GameError(f"submit_decision called in phase {self.phase.name}.")
-        if decision not in ("fold", "play"):
-            raise GameError(f"decision must be 'fold' or 'play', got '{decision!r}'.")
+        if decision not in ("fold", "fold_reveal", "play"):
+            raise GameError(
+                f"decision must be 'fold', 'fold_reveal', or 'play', got '{decision!r}'."
+            )
 
         expected = self.current_decision_player()
         if player_id != expected:
@@ -348,8 +354,9 @@ class Game:
 
         player          = self._get_player(player_id)
         player.decision = decision
+        player.reveal_on_fold = decision == "fold_reveal"
 
-        if decision == "fold":
+        if decision in ("fold", "fold_reveal"):
             player.fold_order = len(self._fold_sequence)
             self._fold_sequence.append(player_id)
 
@@ -398,7 +405,7 @@ class Game:
         """
         play_players = [p for p in self._players if p.decision == "play"]
         fold_players = sorted(
-            (p for p in self._players if p.decision == "fold"),
+            (p for p in self._players if p.decision in ("fold", "fold_reveal")),
             key=lambda p: p.fold_order,   # type: ignore[arg-type]
         )
 
@@ -415,16 +422,19 @@ class Game:
         n = len(self._decision_queue)
         for i, pid in enumerate(self._decision_queue):
             folder_i = self._get_player(pid)
-            if folder_i.decision != "fold":
+            if folder_i.decision not in ("fold", "fold_reveal"):
                 continue
             for j in range(i + 1, n):
                 folder_j = self._get_player(self._decision_queue[j])
-                if folder_j.decision == "fold":
+                if folder_j.decision in ("fold", "fold_reveal"):
                     folder_i.score_round -= 3
                     folder_j.score_round += 3
 
         # ── Battle scoring (round-robin) ───────
         battles: List[BattleResult] = []
+        battle_deltas = {p.player_id: 0 for p in self._players}
+        sweep_wins = {p.player_id: 0 for p in play_players}
+        opponents_faced = {p.player_id: 0 for p in play_players}
 
         for p1, p2 in itertools.combinations(play_players, 2):
             winner, net_pts, swept = battle(p1.front, p1.back, p2.front, p2.back)
@@ -432,15 +442,20 @@ class Game:
             wb, mb = compare_brow(p1.back,  p2.back)
 
             if winner == 1:
-                p1.score_round += net_pts
-                p2.score_round -= net_pts
+                battle_deltas[p1.player_id] += net_pts
+                battle_deltas[p2.player_id] -= net_pts
                 winner_id = p1.player_id
             elif winner == 2:
-                p1.score_round -= net_pts
-                p2.score_round += net_pts
+                battle_deltas[p1.player_id] -= net_pts
+                battle_deltas[p2.player_id] += net_pts
                 winner_id = p2.player_id
             else:
                 winner_id = None
+
+            opponents_faced[p1.player_id] += 1
+            opponents_faced[p2.player_id] += 1
+            if swept and winner_id is not None:
+                sweep_wins[winner_id] += 1
 
             battles.append(BattleResult(
                 p1_id           = p1.player_id,
@@ -460,6 +475,32 @@ class Game:
                 p2_back_label   = hand_label_brow(p2.back),
             ))
 
+        darby_winner_id = None
+        if play_players and len(play_players) == len(self._players):
+            darby_winner_id = next(
+                (
+                    p.player_id for p in play_players
+                    if opponents_faced[p.player_id] == len(play_players) - 1
+                    and sweep_wins[p.player_id] == len(play_players) - 1
+                ),
+                None,
+            )
+
+        if darby_winner_id is not None:
+            for b in battles:
+                if b.winner_id != darby_winner_id:
+                    continue
+                bonus = b.net_points
+                b.net_points *= 2
+                b.darby = True
+                winner = self._get_player(darby_winner_id)
+                loser_id = b.p2_id if b.p1_id == darby_winner_id else b.p1_id
+                battle_deltas[winner.player_id] += bonus
+                battle_deltas[loser_id] -= bonus
+
+        for p in self._players:
+            p.score_round += battle_deltas[p.player_id]
+
         # ── Commit to lifetime totals ──────────
         for p in self._players:
             p.score_total += p.score_round
@@ -469,6 +510,7 @@ class Game:
             battles         = battles,
             play_player_ids = [p.player_id for p in play_players],
             fold_player_ids = [p.player_id for p in fold_players],
+            darby_winner_id = darby_winner_id,
             score_deltas    = {p.player_id: p.score_round for p in self._players},
             scores          = {p.player_id: p.score_total for p in self._players},
         )

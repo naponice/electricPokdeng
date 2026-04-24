@@ -15,7 +15,7 @@ CLIENT → SERVER events
   join              {room, username}
   start_game        {room}
   submit_split      {room, front: [card_str, ...], back: [card_str, ...]}
-  submit_decision   {room, decision: 'fold'|'play'}
+  submit_decision   {room, decision: 'play'|'fold'|'fold_reveal'}
   next_round        {room}
   request_state     {room}          ← reconnecting client
 
@@ -32,7 +32,7 @@ SERVER → CLIENT events
   fold_decision_prompt  {player, seconds}                            → room
   player_decided    {player, decision}                               → room
   showdown          {round, battles, play_players, fold_players,
-                     deltas, scores}                                 → room
+                     deltas, scores, player_summaries}               → room
   round_started     {round, dealer}                                  → room
   player_left       {player_id}                                      → room
   game_state        {snapshot}                                       → you only
@@ -52,6 +52,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from engine.card import Card, Rank, Suit, RANK_SYMBOLS, SUIT_SYMBOLS
 from engine.game import Game, GameError, BattleResult, RoundResult, Phase
+from engine.evaluator import hand_label_brow, hand_label_trow, hand_strength_brow
 
 
 # ──────────────────────────────────────────────
@@ -134,6 +135,7 @@ def _battle_dict(b: BattleResult, rs) -> dict:
         "p1": b.p1_id,           "p2": b.p2_id,
         "winner": b.winner_id,   "net_points": b.net_points,
         "swept": b.swept,
+        "darby": b.darby,
         "front_winner": b.front_winner_id,
         "back_winner":  b.back_winner_id,
         "front_mult":   b.front_mult,
@@ -150,13 +152,33 @@ def _battle_dict(b: BattleResult, rs) -> dict:
 
 
 def _round_dict(rr: RoundResult, rs) -> dict:
+    player_summaries = []
+    for p in rs.game._players:
+        reveal_cards = p.decision == "play" or p.reveal_on_fold
+        back_strength_bucket, back_strength_name = hand_strength_brow(p.back) if (p.back and reveal_cards) else (5, "")
+        back_has_joker = any(card.is_joker for card in p.back)
+        back_effect_tier = 0 if (reveal_cards and back_has_joker and back_strength_bucket == 2) else back_strength_bucket
+        player_summaries.append({
+            "player_id": p.player_id,
+            "decision": p.decision,
+            "reveal_cards": reveal_cards,
+            "front_cards": cards_to_strs(p.front) if reveal_cards else [],
+            "back_cards": cards_to_strs(p.back) if reveal_cards else [],
+            "front_label": hand_label_trow(p.front) if (p.front and reveal_cards) else "",
+            "back_label": hand_label_brow(p.back) if (p.back and reveal_cards) else "",
+            "back_strength_bucket": back_strength_bucket,
+            "back_strength_name": back_strength_name,
+            "back_effect_tier": back_effect_tier,
+        })
     return {
         "round":        rr.round_number,
         "battles":      [_battle_dict(b, rs) for b in rr.battles],
         "play_players": rr.play_player_ids,
         "fold_players": rr.fold_player_ids,
+        "darby_winner": rr.darby_winner_id,
         "deltas":       rr.score_deltas,
         "scores":       rr.scores,
+        "player_summaries": player_summaries,
     }
 
 

@@ -672,6 +672,16 @@ def hand_label_brow(brow: List[Card]) -> str:
     return label
 
 
+def hand_strength_brow(brow: List[Card]) -> Tuple[int, str]:
+    """Return (strength_bucket, strength_name) for a 3-card back hand."""
+    converted = brow_convert_joker(brow)
+    if all(c.is_joker for c in converted):
+        return 0, "Three jokers"
+
+    hs = _brow_strength(converted)
+    return hs, BROW_HAND_NAMES.get(hs, "unknown").replace("_", " ").title()
+
+
 def hand_label_trow(trow: List[Card]) -> str:
     """Return a verbose debug description of a 2-card hand."""
     converted = trow_convert_joker(trow)

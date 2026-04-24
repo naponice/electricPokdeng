@@ -124,6 +124,12 @@ input:focus { border-color: var(--gold-dim); }
   border: 1px solid #8a2d2d;
 }
 .btn-red:hover { background: #6e1f1f; }
+.btn-amber {
+  background: #6d4a16;
+  color: #f7ddab;
+  border: 1px solid #b88733;
+}
+.btn-amber:hover { background: #82591b; }
 .btn-ghost {
   background: transparent;
   color: var(--gold);
@@ -530,6 +536,302 @@ input:focus { border-color: var(--gold-dim); }
   color: var(--gold);
   letter-spacing: 0.05em;
 }
+.showdown-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+}
+.showdown-summary-card {
+  background: linear-gradient(180deg, rgba(19,40,25,.98) 0%, rgba(11,30,16,.98) 100%);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  box-shadow: 0 10px 24px rgba(0,0,0,.18);
+  position: relative;
+  overflow: hidden;
+}
+.showdown-summary-card.me {
+  border-color: rgba(201,148,58,.55);
+  box-shadow: 0 0 0 1px rgba(201,148,58,.12), 0 12px 30px rgba(0,0,0,.22);
+}
+.showdown-summary-card::before {
+  content: '';
+  position: absolute;
+  inset: -30%;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .25s ease;
+}
+.showdown-summary-card.effect-0 {
+  border-color: rgba(255, 208, 102, .65);
+  box-shadow: 0 0 0 1px rgba(255,208,102,.18), 0 0 42px rgba(255,196,77,.28), 0 0 90px rgba(255,196,77,.12), 0 16px 34px rgba(0,0,0,.28);
+}
+.showdown-summary-card.effect-0::before {
+  opacity: 1;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(255,229,161,.46) 0%, rgba(255,229,161,0) 44%),
+    radial-gradient(circle at 50% 80%, rgba(255,196,77,.16) 0%, rgba(255,196,77,0) 42%),
+    linear-gradient(120deg, rgba(255,213,94,0) 18%, rgba(255,241,195,.28) 50%, rgba(255,213,94,0) 82%);
+  animation: summary-sheen 3.5s linear infinite, summary-pulse-gold 2.6s ease-in-out infinite;
+}
+.showdown-summary-card.effect-1 {
+  border-color: rgba(112, 219, 255, .48);
+  box-shadow: 0 0 0 1px rgba(112,219,255,.12), 0 0 30px rgba(67,181,255,.22), 0 0 66px rgba(67,181,255,.1), 0 14px 32px rgba(0,0,0,.24);
+}
+.showdown-summary-card.effect-1::before {
+  opacity: .95;
+  background:
+    radial-gradient(circle at 50% 14%, rgba(129,220,255,.28) 0%, rgba(129,220,255,0) 48%),
+    linear-gradient(180deg, rgba(129,220,255,.06) 0%, rgba(129,220,255,0) 70%);
+  animation: summary-pulse-cool 3s ease-in-out infinite;
+}
+.showdown-summary-card.effect-2 {
+  border-color: rgba(255, 161, 95, .45);
+  box-shadow: 0 0 0 1px rgba(255,161,95,.12), 0 0 24px rgba(255,145,77,.18), 0 0 56px rgba(255,145,77,.08), 0 14px 32px rgba(0,0,0,.24);
+}
+.showdown-summary-card.effect-2::before {
+  opacity: .84;
+  background:
+    radial-gradient(circle at 50% 16%, rgba(255,168,112,.24) 0%, rgba(255,168,112,0) 50%),
+    linear-gradient(180deg, rgba(255,168,112,.05) 0%, rgba(255,168,112,0) 70%);
+  animation: summary-pulse-warm 3.2s ease-in-out infinite;
+}
+.showdown-summary-card.effect-3 {
+  border-color: rgba(220, 168, 255, .38);
+  box-shadow: 0 0 0 1px rgba(220,168,255,.1), 0 0 20px rgba(181,127,240,.14), 0 0 46px rgba(181,127,240,.06), 0 12px 30px rgba(0,0,0,.22);
+}
+.showdown-summary-card.effect-3::before {
+  opacity: .74;
+  background: radial-gradient(circle at 50% 14%, rgba(211,169,255,.2) 0%, rgba(211,169,255,0) 48%);
+  animation: summary-pulse-violet 3.4s ease-in-out infinite;
+}
+.showdown-summary-card.effect-4 {
+  border-color: rgba(108, 207, 147, .34);
+  box-shadow: 0 0 0 1px rgba(108,207,147,.1), 0 0 16px rgba(108,207,147,.12), 0 10px 26px rgba(0,0,0,.2);
+}
+.showdown-summary-card.effect-4::before {
+  opacity: .64;
+  background: radial-gradient(circle at 50% 12%, rgba(108,207,147,.12) 0%, rgba(108,207,147,0) 44%);
+}
+.showdown-summary-card .mini-card {
+  transition: transform .22s ease, box-shadow .22s ease, filter .22s ease;
+}
+.showdown-summary-card.effect-0 .mini-card {
+  box-shadow: 0 0 16px rgba(255,214,120,.18), 0 2px 8px rgba(0,0,0,.42);
+  filter: saturate(1.08);
+}
+.showdown-summary-card.effect-1 .mini-card {
+  box-shadow: 0 0 12px rgba(112,219,255,.18), 0 2px 8px rgba(0,0,0,.42);
+}
+.showdown-summary-card.effect-2 .mini-card {
+  box-shadow: 0 0 10px rgba(255,161,95,.16), 0 2px 8px rgba(0,0,0,.4);
+}
+.showdown-summary-card.effect-3 .mini-card {
+  box-shadow: 0 0 9px rgba(220,168,255,.13), 0 2px 8px rgba(0,0,0,.4);
+}
+.showdown-summary-card.effect-4 .mini-card {
+  box-shadow: 0 0 8px rgba(108,207,147,.12), 0 2px 8px rgba(0,0,0,.38);
+}
+.summary-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.summary-rank-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+.summary-rank-badge {
+  min-width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid rgba(201,148,58,.35);
+  background: rgba(201,148,58,.12);
+  color: var(--gold);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+.summary-player-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.summary-player-name {
+  font-family: 'Libre Baskerville', serif;
+  font-size: 1rem;
+  color: var(--text);
+}
+.summary-player-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.summary-chip {
+  padding: 0.18rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(255,255,255,.04);
+}
+.summary-chip.pos {
+  color: #2ecc71;
+  border-color: rgba(39,174,96,.35);
+  background: rgba(39,174,96,.12);
+}
+.summary-chip.neg {
+  color: #e74c3c;
+  border-color: rgba(192,57,43,.3);
+  background: rgba(192,57,43,.1);
+}
+.summary-chip.fold {
+  color: #e7b96b;
+  border-color: rgba(201,148,58,.28);
+  background: rgba(201,148,58,.1);
+}
+.summary-chip.darby {
+  color: #ffe3a0;
+  border-color: rgba(255,208,102,.35);
+  background: rgba(255,208,102,.14);
+}
+.summary-score {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.summary-score-label {
+  font-size: 0.62rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.summary-score-total {
+  font-family: 'DM Mono', monospace;
+  font-size: 1.1rem;
+  color: var(--gold);
+}
+.summary-pyramid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.15rem 0 0.25rem;
+}
+.summary-pyramid-top,
+.summary-pyramid-base {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+}
+.summary-pyramid-top .mini-card,
+.summary-pyramid-base .mini-card {
+  width: 42px;
+  height: 60px;
+}
+.summary-hand-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+.summary-strength-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.summary-strength-badge {
+  padding: 0.22rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--gold);
+  border: 1px solid rgba(201,148,58,.25);
+  background: rgba(201,148,58,.08);
+}
+.summary-strength-tier {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.68rem;
+  color: var(--text-dim);
+}
+.summary-strength-badge.effect-0 {
+  color: #ffe3a0;
+  border-color: rgba(255,208,102,.45);
+  background: rgba(255,208,102,.14);
+  box-shadow: 0 0 18px rgba(255,208,102,.14);
+}
+.summary-strength-badge.effect-1 {
+  color: #9de3ff;
+  border-color: rgba(112,219,255,.38);
+  background: rgba(112,219,255,.12);
+  box-shadow: 0 0 14px rgba(112,219,255,.12);
+}
+.summary-strength-badge.effect-2 {
+  color: #ffc49b;
+  border-color: rgba(255,161,95,.34);
+  background: rgba(255,161,95,.12);
+  box-shadow: 0 0 12px rgba(255,161,95,.1);
+}
+.summary-strength-badge.effect-3 {
+  color: #ddb5ff;
+  border-color: rgba(220,168,255,.3);
+  background: rgba(220,168,255,.1);
+}
+.summary-strength-badge.effect-4 {
+  color: #9fe2b6;
+  border-color: rgba(108,207,147,.28);
+  background: rgba(108,207,147,.1);
+}
+.summary-hand-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.summary-hand-title {
+  font-size: 0.64rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.summary-hand-text {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  line-height: 1.45;
+  font-style: italic;
+}
+@keyframes summary-sheen {
+  0% { transform: translateX(-10%) translateY(0); }
+  50% { transform: translateX(10%) translateY(1%); }
+  100% { transform: translateX(-10%) translateY(0); }
+}
+@keyframes summary-pulse-gold {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.14); }
+}
+@keyframes summary-pulse-cool {
+  0%, 100% { transform: scale(1); opacity: .88; }
+  50% { transform: scale(1.02); opacity: 1; }
+}
+@keyframes summary-pulse-warm {
+  0%, 100% { transform: scale(1); opacity: .8; }
+  50% { transform: scale(1.018); opacity: .92; }
+}
+@keyframes summary-pulse-violet {
+  0%, 100% { transform: scale(1); opacity: .72; }
+  50% { transform: scale(1.014); opacity: .86; }
+}
 .battle-card {
   background: var(--felt-light);
   border: 1px solid var(--border);
@@ -566,6 +868,7 @@ input:focus { border-color: var(--gold-dim); }
 .badge-loss { background: rgba(192,57,43,.2);  color: #e74c3c; border: 1px solid rgba(192,57,43,.3); }
 .badge-tie  { background: rgba(127,140,141,.2); color: #95a5a6; border: 1px solid rgba(127,140,141,.3); }
 .badge-sweep { background: rgba(201,148,58,.2); color: var(--gold); border: 1px solid var(--border); margin-left: 0.4rem; }
+.badge-darby { background: rgba(255,208,102,.24); color: #ffe3a0; border: 1px solid rgba(255,208,102,.38); margin-left: 0.4rem; }
 .battle-hands {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -735,6 +1038,19 @@ input:focus { border-color: var(--gold-dim); }
 .mini-card.red  { color: var(--card-red); }
 .mini-card.black { color: var(--card-black); }
 .mini-card.joker { border: 1.5px solid var(--gold); color: var(--gold); background: linear-gradient(135deg, #fef9f0 0%, #fdf0c8 100%); }
+.mini-card.hidden-card {
+  background:
+    linear-gradient(135deg, rgba(201,148,58,.24) 0%, rgba(26,53,32,.95) 100%),
+    repeating-linear-gradient(
+      45deg,
+      rgba(255,255,255,.06) 0,
+      rgba(255,255,255,.06) 2px,
+      transparent 2px,
+      transparent 6px
+    );
+  border: 1px solid rgba(201,148,58,.28);
+  color: rgba(255,236,205,.75);
+}
 
 /* ── Utilities ──────────────────────────────── */
 .hidden { display: none !important; }
@@ -873,6 +1189,7 @@ input:focus { border-color: var(--gold-dim); }
       <div class="decision-header" id="decision-header">Your turn to decide</div>
       <div class="decision-buttons">
         <button class="btn btn-red btn-lg" id="btn-fold" onclick="decide('fold')">Fold</button>
+        <button class="btn btn-amber btn-lg" id="btn-fold-reveal" onclick="decide('fold_reveal')">Fold and reveal</button>
         <button class="btn btn-green btn-lg" id="btn-play" onclick="decide('play')">Play</button>
       </div>
       <div class="timer-wrap">
@@ -893,6 +1210,7 @@ input:focus { border-color: var(--gold-dim); }
 
     <!-- Showdown results -->
     <div id="zone-showdown" class="showdown-section hidden">
+      <div id="showdown-summary-grid" class="showdown-summary-grid"></div>
       <div class="showdown-title">Showdown</div>
       <div id="battles-container"></div>
       <div class="score-section" id="score-section" style="margin-top:0.5rem"></div>
@@ -976,6 +1294,19 @@ function miniCardHtml(cardStr) {
   const suit = cardStr.slice(-1);
   const rank = cardStr.slice(0, -1) === 'T' ? '10' : cardStr.slice(0, -1);
   return `<div class="mini-card ${SUIT_CLS[suit]}"><span class="mc-rank">${rank}</span><span class="mc-suit">${SUIT_SYM[suit]}</span></div>`;
+}
+
+function miniHiddenCardHtml() {
+  return `<div class="mini-card hidden-card"><span class="mc-rank">?</span><span class="mc-suit">✦</span></div>`;
+}
+
+function escapeHtml(text) {
+  return String(text ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
 
 // Plain (non-interactive) card — used in showdown preview and decision display
@@ -1383,7 +1714,7 @@ function onFoldPrompt(d) {
   if (d.player === myId) {
     hide('zone-spectating');
     show('zone-decision');
-    document.getElementById('decision-header').textContent = 'Your turn — fold or play?';
+    document.getElementById('decision-header').textContent = 'Your turn — play, fold, or fold and reveal?';
     startTimer(d.seconds, 'timer-bar', 'timer-num');
   } else {
     hide('zone-decision');
@@ -1400,7 +1731,7 @@ function onPlayerDecided(d) {
   );
   renderPlayersBar();
   if (d.player !== myId) {
-    toast(`${d.player} chose to ${d.decision}`);
+    toast(`${d.player} chose to ${decisionLabel(d.decision)}`);
   }
   stopTimer();
 }
@@ -1428,6 +1759,8 @@ function onShowdown(d) {
 }
 
 function renderShowdown(d) {
+  renderShowdownSummary(d);
+
   const container = document.getElementById('battles-container');
   container.innerHTML = d.battles.map(b => {
     const wMe = b.winner === myId ? 'win' : b.winner === null ? 'tie' : 'loss';
@@ -1454,6 +1787,7 @@ function renderShowdown(d) {
             ? `<span class="battle-winner-badge badge-win">${b.winner} +${b.net_points}pt${b.net_points!==1?'s':''}</span>`
             : `<span class="battle-winner-badge badge-tie">Tie</span>`}
           ${b.swept ? `<span class="battle-winner-badge badge-sweep">Sweep</span>` : ''}
+          ${b.darby ? `<span class="battle-winner-badge badge-darby">Darby x2</span>` : ''}
         </div>
       </div>
       <div class="battle-hands">
@@ -1507,6 +1841,70 @@ function renderShowdown(d) {
       </tr>`;
     }).join('')}</tbody>
   </table>`;
+}
+
+function renderShowdownSummary(d) {
+  const container = document.getElementById('showdown-summary-grid');
+  if (!container) return;
+
+  const summaries = new Map((d.player_summaries || []).map(s => [s.player_id, s]));
+  const sortedPlayers = [...players].sort((a, b) => {
+    const scoreDiff = (d.scores[b.player_id] || 0) - (d.scores[a.player_id] || 0);
+    if (scoreDiff !== 0) return scoreDiff;
+    return a.player_id.localeCompare(b.player_id);
+  });
+
+  container.innerHTML = sortedPlayers.map((player, index) => {
+    const summary = summaries.get(player.player_id) || {};
+    const delta = d.deltas[player.player_id] || 0;
+    const deltaCls = delta > 0 ? 'pos' : delta < 0 ? 'neg' : '';
+    const deltaText = delta > 0 ? `+${delta}` : `${delta}`;
+    const folded = (d.fold_players || []).includes(player.player_id);
+    const revealCards = !!summary.reveal_cards;
+    const topCards = revealCards ? (summary.front_cards || []) : Array(2).fill('hidden');
+    const baseCards = revealCards ? (summary.back_cards || []) : Array(3).fill('hidden');
+    const backEffectTier = Number.isInteger(summary.back_effect_tier) ? summary.back_effect_tier : 5;
+    const backStrengthBucket = Number.isInteger(summary.back_strength_bucket) ? summary.back_strength_bucket : 5;
+    const backStrengthName = summary.back_strength_name || (revealCards ? 'Points' : 'Hidden');
+
+    return `<div class="showdown-summary-card effect-${backEffectTier} ${player.player_id === myId ? 'me' : ''}">
+      <div class="summary-head">
+        <div class="summary-rank-wrap">
+          <div class="summary-rank-badge">#${index + 1}</div>
+          <div class="summary-player-block">
+            <div class="summary-player-name">${escapeHtml(player.player_id)}</div>
+            <div class="summary-player-meta">
+              <span class="summary-chip ${deltaCls}">Round ${deltaText}</span>
+              <span class="summary-chip ${folded ? 'fold' : ''}">${folded ? (revealCards ? 'Folded reveal' : 'Folded hidden') : 'Played'}</span>
+              ${d.darby_winner === player.player_id ? '<span class="summary-chip darby">Darby</span>' : ''}
+            </div>
+          </div>
+        </div>
+        <div class="summary-score">
+          <div class="summary-score-label">Total</div>
+          <div class="summary-score-total">${d.scores[player.player_id] || 0}</div>
+        </div>
+      </div>
+      <div class="summary-pyramid">
+        <div class="summary-pyramid-top">${topCards.map(c => c === 'hidden' ? miniHiddenCardHtml() : miniCardHtml(c)).join('')}</div>
+        <div class="summary-pyramid-base">${baseCards.map(c => c === 'hidden' ? miniHiddenCardHtml() : miniCardHtml(c)).join('')}</div>
+      </div>
+      <div class="summary-hand-summary">
+        <div class="summary-strength-row">
+          <span class="summary-strength-badge effect-${backEffectTier}">${escapeHtml(backStrengthName)}</span>
+          <span class="summary-strength-tier">${revealCards ? `Back tier ${backStrengthBucket}` : 'No reveal'}</span>
+        </div>
+        <div class="summary-hand-row">
+          <div class="summary-hand-title">Front</div>
+          <div class="summary-hand-text">${escapeHtml(summary.front_label || (folded ? 'Folded without reveal.' : ''))}</div>
+        </div>
+        <div class="summary-hand-row">
+          <div class="summary-hand-title">Back</div>
+          <div class="summary-hand-text">${escapeHtml(summary.back_label || (folded ? 'Folded without reveal.' : ''))}</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function onWaitingRoom(d) {
@@ -1591,6 +1989,7 @@ function renderPlayersBar(waitingFor = null) {
 
     if (leftPlayers.has(p.player_id))    { dot = 'dot-left'; statusLabel = 'Left'; }
     else if (p.decision === 'fold')       { dot = 'dot-fold'; statusLabel = 'Folded'; }
+    else if (p.decision === 'fold_reveal') { dot = 'dot-fold'; statusLabel = 'Fold + reveal'; }
     else if (p.decision === 'play')       { dot = 'dot-play'; statusLabel = 'Playing'; }
     else if (p.has_split === true)        { dot = 'dot-split'; statusLabel = 'Split ✓'; }
     else if (waitingFor && waitingFor.includes(p.player_id)) { dot = 'dot-wait'; statusLabel = 'Splitting…'; }
@@ -1611,6 +2010,11 @@ function renderPlayersBar(waitingFor = null) {
       <span class="status-label">${statusLabel}</span>
     </div>`;
   }).join('');
+}
+
+function decisionLabel(decision) {
+  if (decision === 'fold_reveal') return 'fold and reveal';
+  return decision || '';
 }
 
 function renderIdleScores() {
