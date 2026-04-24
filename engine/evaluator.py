@@ -10,11 +10,11 @@ Hands are compared independently (trow vs trow, brow vs brow) in round-robin.
   Card point values:
     2–9  →  face value  |  10, J, Q, K  →  0  |  A  →  1  |  Joker  →  wildcard
 
-  Special "Pok" hands (score = 7.5, beat scores 0–7 but lose to 8 and 9):
-    Pok face    — both cards are face cards (J/Q/K)
-    Pok 55      — both cards score 5 (two 5s)
-    Pok 10-10   — both cards are 10s
-    Pok suited  — both cards score 0 AND are same suit (e.g. K♠–Q♠)
+  Special 7.5-point hands (beat scores 0–7 but lose to 8 and 9):
+    7.5 points (face)    — both cards are face cards (J/Q/K)
+    7.5 points (55)      — both cards score 5 (two 5s)
+    7.5 points (10-10)   — both cards are 10s
+    7.5 points (suited)  — both cards score 0 AND are same suit (e.g. K♠–Q♠)
 
   Normal hand score  =  sum(card values) mod 10   (0–9)
 
@@ -307,7 +307,7 @@ def _trow_classify(trow: List[Card]):
     """
     Classify a concrete (joker-free) 2-card hand.
     Returns (score, has_pair, is_suited, kicker_rank, kicker_suit).
-    score is 0.0–9.0 or 7.5 for special Pok hands.
+    score is 0.0–9.0 or 7.5 for special 7.5-point hands.
     """
     suited = _is_suited(trow)
     pair   = trow[0].rank == trow[1].rank
@@ -613,30 +613,150 @@ def battle(
 # ──────────────────────────────────────────────
 
 def hand_label_brow(brow: List[Card]) -> str:
-    """Return the hand category name of a 3-card hand."""
+    """Return a verbose debug description of a 3-card hand."""
     converted = brow_convert_joker(brow)
     if all(c.is_joker for c in converted):
-        return "Three jokers"
+        return "Three jokers | auto win | mult x20"
+
     hs = _brow_strength(converted)
-    return BROW_HAND_NAMES.get(hs, "unknown").replace("_", " ").title()
+    suited = _is_suited(converted)
+    raw_points = sum(card_game_score(c) for c in converted) % 10
+    pair_rank = _pair_rank(converted)
+    kicker_rank, kicker_suit = _kicker(converted)
+    resolved = _resolved_cards_text(brow, converted)
+
+    if hs == _HAND_STRENGTH["royal_straight_flush"]:
+        details = "Royal straight flush Q-K-A"
+    elif hs == _HAND_STRENGTH["straight_flush"]:
+        details = f"Straight flush {_straight_sequence_text(converted)}"
+    elif hs == _HAND_STRENGTH["trips"]:
+        details = f"Trips {_rank_name(converted[0].rank.value)}"
+    elif hs == _HAND_STRENGTH["zian"]:
+        if pair_rank:
+            odd = next(c for c in converted if c.rank.value != pair_rank)
+            details = (
+                f"Zian | pair: {_rank_name(pair_rank)} | odd: {str(odd)}"
+            )
+        else:
+            ordered = " ".join(str(c) for c in _sorted_cards_desc(converted))
+            details = f"Zian | pair: no | order: {ordered}"
+    elif hs == _HAND_STRENGTH["straight"]:
+        high = _straight_high(converted)
+        details = f"Straight {_straight_sequence_text(converted)} | high: {_rank_name(high)}"
+    else:
+        details = (
+            f"Points {raw_points} | suited: {'yes' if suited else 'no'} "
+            f"| pair: {_rank_name(pair_rank) if pair_rank else 'no'}"
+        )
+
+    extra = []
+    if hs != _HAND_STRENGTH["points"]:
+        extra.append(f"raw points: {raw_points}")
+    if hs not in (
+        _HAND_STRENGTH["trips"],
+        _HAND_STRENGTH["straight"],
+        _HAND_STRENGTH["straight_flush"],
+        _HAND_STRENGTH["royal_straight_flush"],
+        _HAND_STRENGTH["points"],
+    ):
+        extra.append(f"suited: {'yes' if suited else 'no'}")
+    if hs not in (_HAND_STRENGTH["trips"], _HAND_STRENGTH["zian"], _HAND_STRENGTH["points"]):
+        extra.append(f"pair: {_rank_name(pair_rank) if pair_rank else 'no'}")
+    extra.append(f"kicker: {_rank_suit_text(kicker_rank, kicker_suit)}")
+
+    label = details
+    if resolved:
+        label += f" | {resolved}"
+    if extra:
+        label += " | " + " | ".join(extra)
+    return label
 
 
 def hand_label_trow(trow: List[Card]) -> str:
-    """Return a short description of a 2-card hand."""
-    converted      = trow_convert_joker(trow)
-    score, pair, suited, _, _ = _trow_classify(converted)
+    """Return a verbose debug description of a 2-card hand."""
+    converted = trow_convert_joker(trow)
+    score, pair, suited, kicker_rank, kicker_suit = _trow_classify(converted)
+    resolved = _resolved_cards_text(trow, converted)
+    raw_points = sum(card_game_score(c) for c in converted) % 10
+
     if score == 7.5:
+        types = []
         if all(is_face(c) for c in converted):
-            return "Pok face"
+            types.append("face")
         if all(c.rank == Rank.TEN for c in converted):
-            return "Pok 10-10"
+            types.append("10-10")
         if all(card_game_score(c) == 5 for c in converted):
-            return "Pok 55"
-        return "Pok suited"
-    parts = []
-    if pair:
-        parts.append("pair")
-    if suited:
-        parts.append("suited")
-    suffix = f" ({', '.join(parts)})" if parts else ""
-    return f"Score {int(score)}{suffix}"
+            types.append("55")
+        if raw_points == 0 and suited:
+            types.append("suited")
+        label = f"7.5 points | types: {', '.join(types)}"
+        parts = [
+            f"raw points: {raw_points}",
+            f"pair: {_rank_name(converted[0].rank.value) if pair else 'no'}",
+            f"suited: {'yes' if suited else 'no'}",
+            f"kicker: {_rank_suit_text(kicker_rank, kicker_suit)}",
+        ]
+        if resolved:
+            parts.insert(0, resolved)
+        return label + " | " + " | ".join(parts)
+
+    parts = [
+        f"Score {int(score)}",
+        f"pair: {_rank_name(converted[0].rank.value) if pair else 'no'}",
+        f"suited: {'yes' if suited else 'no'}",
+        f"kicker: {_rank_suit_text(kicker_rank, kicker_suit)}",
+    ]
+    if resolved:
+        parts.append(resolved)
+    return " | ".join(parts)
+
+
+def _rank_name(rank_value: int) -> str:
+    if rank_value <= 0:
+        return "none"
+    rank = _VAL_TO_RANK[rank_value]
+    return {
+        Rank.TWO: "2",
+        Rank.THREE: "3",
+        Rank.FOUR: "4",
+        Rank.FIVE: "5",
+        Rank.SIX: "6",
+        Rank.SEVEN: "7",
+        Rank.EIGHT: "8",
+        Rank.NINE: "9",
+        Rank.TEN: "10",
+        Rank.JACK: "J",
+        Rank.QUEEN: "Q",
+        Rank.KING: "K",
+        Rank.ACE: "A",
+    }[rank]
+
+
+def _suit_name(suit_value: int) -> str:
+    return {
+        Suit.CLUBS.value: "c",
+        Suit.DIAMONDS.value: "d",
+        Suit.HEARTS.value: "h",
+        Suit.SPADES.value: "s",
+    }[suit_value]
+
+
+def _rank_suit_text(rank_value: int, suit_value: int) -> str:
+    return f"{_rank_name(rank_value)}{_suit_name(suit_value)}"
+
+
+def _sorted_cards_desc(cards: List[Card]) -> List[Card]:
+    return sorted(cards, key=lambda c: (c.rank.value, c.suit.value), reverse=True)
+
+
+def _straight_sequence_text(cards: List[Card]) -> str:
+    vals = sorted(c.rank.value for c in cards)
+    if vals == [2, 3, 14]:
+        return "A-2-3"
+    return "-".join(_rank_name(v) for v in vals)
+
+
+def _resolved_cards_text(original: List[Card], converted: List[Card]) -> str:
+    if not any(c.is_joker for c in original):
+        return ""
+    return "as: " + " ".join(str(c) for c in _sorted_cards_desc(converted))
