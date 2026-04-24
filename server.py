@@ -40,8 +40,11 @@ SERVER → CLIENT events
 Card string format: "As"=A♠  "Kh"=K♥  "Tc"=10♣  "JK"=Joker
 """
 
+import atexit
+import json
 import threading
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Dict, List, Optional
 
 from flask import Flask, request
@@ -107,8 +110,8 @@ class RoomState:
     archived_scores: Dict[str, int]           = field(default_factory=dict)
 
 
-# Keyed by room_id string
-rooms: Dict[str, RoomState] = {}
+STATE_PATH = Path(os.environ.get("ROOM_STATE_PATH", "room_state.json"))
+_persist_lock = threading.Lock()
 
 
 # ──────────────────────────────────────────────
@@ -118,6 +121,136 @@ rooms: Dict[str, RoomState] = {}
 app = Flask(__name__, static_folder="frontend", static_url_path="")
 app.config["SECRET_KEY"] = "change-me-in-production"
 socketio = SocketIO(app, async_mode="threading", cors_allowed_origins="*")
+
+
+def _serialise_card_lists(cards: List[Card]) -> List[str]:
+    return [card_to_str(card) for card in cards]
+
+
+def _deserialise_card_lists(cards: List[str]) -> List[Card]:
+    return [str_to_card(card) for card in cards]
+
+
+def _game_to_dict(game: Game) -> dict:
+    return {
+        "room_id": game.room_id,
+        "phase": game.phase.name,
+        "round_number": game.round_number,
+        "dealer_seat": game.dealer_seat,
+        "decision_queue": list(game._decision_queue),
+        "decision_pos": game._decision_pos,
+        "fold_sequence": list(game._fold_sequence),
+        "players": [
+            {
+                "player_id": p.player_id,
+                "seat": p.seat,
+                "hand": _serialise_card_lists(p.hand),
+                "front": _serialise_card_lists(p.front),
+                "back": _serialise_card_lists(p.back),
+                "has_split": p.has_split,
+                "decision": p.decision,
+                "fold_order": p.fold_order,
+                "reveal_on_fold": p.reveal_on_fold,
+                "score_total": p.score_total,
+                "score_round": p.score_round,
+            }
+            for p in game.players
+        ],
+    }
+
+
+def _game_from_dict(data: dict) -> Game:
+    game = Game(data["room_id"])
+    saved_phase = Phase[data["phase"]]
+    saved_round_number = data["round_number"]
+    saved_dealer_seat = data["dealer_seat"]
+    saved_decision_queue = list(data.get("decision_queue", []))
+    saved_decision_pos = data.get("decision_pos", 0)
+    saved_fold_sequence = list(data.get("fold_sequence", []))
+
+    restored_players = []
+    for player_data in data.get("players", []):
+        player = game.add_player(player_data["player_id"])
+        player.seat = player_data["seat"]
+        player.hand = _deserialise_card_lists(player_data.get("hand", []))
+        player.front = _deserialise_card_lists(player_data.get("front", []))
+        player.back = _deserialise_card_lists(player_data.get("back", []))
+        player.has_split = player_data.get("has_split", False)
+        player.decision = player_data.get("decision")
+        player.fold_order = player_data.get("fold_order")
+        player.reveal_on_fold = player_data.get("reveal_on_fold", False)
+        player.score_total = player_data.get("score_total", 0)
+        player.score_round = player_data.get("score_round", 0)
+        restored_players.append(player)
+
+    game._players = sorted(restored_players, key=lambda p: p.seat)
+    for seat, player in enumerate(game._players):
+        player.seat = seat
+
+    game.phase = saved_phase
+    game.round_number = saved_round_number
+    game._decision_queue = saved_decision_queue
+    game._decision_pos = saved_decision_pos
+    game._fold_sequence = saved_fold_sequence
+
+    if game._players:
+        game.dealer_seat = saved_dealer_seat % len(game._players)
+    else:
+        game.dealer_seat = 0
+
+    return game
+
+
+def _room_to_dict(rs: RoomState) -> dict:
+    return {
+        "game": _game_to_dict(rs.game),
+        "game_started": rs.game_started,
+        "waiting_players": list(rs.waiting_players),
+        "left_players": list(rs.left_players),
+        "archived_scores": dict(rs.archived_scores),
+    }
+
+
+def _room_from_dict(data: dict) -> RoomState:
+    return RoomState(
+        game=_game_from_dict(data["game"]),
+        game_started=data.get("game_started", False),
+        waiting_players=list(data.get("waiting_players", [])),
+        left_players=set(data.get("left_players", [])),
+        archived_scores=dict(data.get("archived_scores", {})),
+    )
+
+
+def _load_rooms() -> Dict[str, RoomState]:
+    if not STATE_PATH.exists():
+        return {}
+    try:
+        payload = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return {
+        room_id: _room_from_dict(room_data)
+        for room_id, room_data in payload.get("rooms", {}).items()
+    }
+
+
+def _save_rooms() -> None:
+    payload = {
+        "rooms": {
+            room_id: _room_to_dict(rs)
+            for room_id, rs in rooms.items()
+        }
+    }
+    STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = STATE_PATH.with_suffix(f"{STATE_PATH.suffix}.tmp")
+    with _persist_lock:
+        tmp_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        tmp_path.replace(STATE_PATH)
+
+
+# Keyed by room_id string
+rooms: Dict[str, RoomState] = _load_rooms()
+atexit.register(_save_rooms)
 
 
 # ──────────────────────────────────────────────
@@ -293,6 +426,7 @@ def handle_join(data):
 
     if room_id not in rooms:
         rooms[room_id] = RoomState(game=Game(room_id))
+        _save_rooms()
 
     rs = rooms[room_id]
 
@@ -330,7 +464,9 @@ def handle_join(data):
             rs.waiting_players.append(player_id)
             rs.sid_to_player[request.sid] = player_id
             rs.player_to_sid[player_id]   = request.sid
+            rs.left_players.discard(player_id)
             join_room(room_id)
+            _save_rooms()
             active_players = [{"player_id": p.player_id, "seat": p.seat} for p in rs.game.players]
             emit("joined", {
                 "room":            room_id,
@@ -359,6 +495,7 @@ def handle_join(data):
             rs.sid_to_player[request.sid] = player_id
             rs.player_to_sid[player_id]   = request.sid
             join_room(room_id)
+            rs.left_players.discard(player_id)
             emit("joined", {
                 "room":            room_id,
                 "your_player_id":  player_id,
@@ -386,6 +523,7 @@ def handle_join(data):
         rs.sid_to_player[request.sid] = player_id
         rs.player_to_sid[player_id]   = request.sid
         join_room(room_id)
+        _save_rooms()
 
     players = [{"player_id": p.player_id, "seat": p.seat} for p in rs.game.players]
     emit("joined", {
@@ -415,6 +553,7 @@ def handle_start_game(data):
         except GameError as e:
             return emit("error", {"message": str(e)})
         rs.game_started = True
+        _save_rooms()
 
     socketio.emit("game_started", {
         "round":  deal.round_number,
@@ -447,6 +586,7 @@ def handle_submit_split(data):
             result = rs.game.submit_split(player_id, front, back)
         except GameError as e:
             return emit("error", {"message": str(e)})
+        _save_rooms()
 
     room_id = data["room"]
 
@@ -480,6 +620,7 @@ def handle_submit_decision(data):
         except GameError as e:
             return emit("error", {"message": str(e)})
         _cancel_timer(rs)
+        _save_rooms()
 
     socketio.emit("player_decided", {
         "player":   player_id,
@@ -519,6 +660,7 @@ def handle_next_round(data):
             deal = rs.game.next_round()
         except GameError as e:
             return emit("error", {"message": str(e)})
+        _save_rooms()
 
     all_players = [{"player_id": p.player_id, "seat": p.seat} for p in rs.game.players]
 
@@ -619,6 +761,7 @@ def handle_leave_game(data):
                     _prompt_next(room_id)
             except GameError:
                 pass
+        _save_rooms()
 
     # Broadcast left status — clients show red dot
     socketio.emit("player_left", {
@@ -679,6 +822,7 @@ def handle_disconnect():
                                       to=room_id)
                     else:
                         _prompt_next(room_id)
+        _save_rooms()
 
         socketio.emit("player_left", {
             "player_id":   player_id,
@@ -707,4 +851,11 @@ def health():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    socketio.run(app, debug=True, host="0.0.0.0", port=port)
+    debug = os.environ.get("FLASK_DEBUG", "").lower() in {"1", "true", "yes", "on"}
+    socketio.run(
+        app,
+        debug=debug,
+        use_reloader=debug,
+        host="0.0.0.0",
+        port=port,
+    )
