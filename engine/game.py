@@ -49,6 +49,11 @@ from .evaluator import (
 )
 
 
+def _dealt_hand_sort_key(card: Card) -> tuple[int, int, int]:
+    """Sort visible dealt hands as 2..A, then Joker last."""
+    return (1 if card.is_joker else 0, card.rank.value, card.suit.value)
+
+
 # ──────────────────────────────────────────────
 # Phase enum
 # ──────────────────────────────────────────────
@@ -286,7 +291,7 @@ class Game:
         deck = Deck().shuffle()
         dealt: Dict[str, List[Card]] = {}
         for p in self._players:
-            p.hand       = deck.deal(5)
+            p.hand       = sorted(deck.deal(5), key=_dealt_hand_sort_key)
             dealt[p.player_id] = list(p.hand)
 
         self.phase = Phase.SPLITTING
