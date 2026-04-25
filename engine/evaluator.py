@@ -412,9 +412,21 @@ def _brow_strength(brow: List[Card]) -> int:
 
 
 def _straight_high(brow: List[Card]) -> int:
-    """High-card rank value for straight tiebreaking. Wheel (A-2-3) high = 3."""
+    """Display high-card rank for straights. Wheel (A-2-3) displays as high 3."""
     vals = sorted(c.rank.value for c in brow)
     return 3 if vals == [2, 3, 14] else vals[2]
+
+
+def _straight_tiebreak_value(brow: List[Card]) -> int:
+    """
+    Tiebreak value for straights and straight flushes.
+
+    House rule:
+      A-2-3 beats every non-royal straight / straight flush.
+      Q-K-A (royal straight flush) remains stronger via hand bucket.
+    """
+    vals = sorted(c.rank.value for c in brow)
+    return 15 if vals == [2, 3, 14] else vals[2]
 
 
 # ──────────────────────────────────────────────
@@ -477,8 +489,8 @@ def _brow_tiebreak(
     # RSF, SF, Trips — kicker by high card
     if shared_hs in (0, 1, 2):
         if shared_hs in (1, 4):   # SF or Straight: compare straight-high
-            h1 = _straight_high(brow1)
-            h2 = _straight_high(brow2)
+            h1 = _straight_tiebreak_value(brow1)
+            h2 = _straight_tiebreak_value(brow2)
             # For suit tiebreak, use the highest card's suit
             ks1 = max(c.suit.value for c in brow1 if c.rank.value == max(c.rank.value for c in brow1))
             ks2 = max(c.suit.value for c in brow2 if c.rank.value == max(c.rank.value for c in brow2))
@@ -488,8 +500,8 @@ def _brow_tiebreak(
         return {1: 1, -1: 2, 0: 0}[res]
 
     if shared_hs == 4:   # Straight
-        h1  = _straight_high(brow1)
-        h2  = _straight_high(brow2)
+        h1  = _straight_tiebreak_value(brow1)
+        h2  = _straight_tiebreak_value(brow2)
         ks1 = max(c.suit.value for c in brow1 if c.rank.value == max(c.rank.value for c in brow1))
         ks2 = max(c.suit.value for c in brow2 if c.rank.value == max(c.rank.value for c in brow2))
         res = _compare_kicker(h1, ks1, h2, ks2)

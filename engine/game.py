@@ -11,7 +11,7 @@ Round lifecycle
                 Submissions are simultaneous — anyone can submit in any order.
                 Phase ends automatically once every player has submitted.
   FOLD_DECISION One player at a time decides: play, fold, or fold and reveal.
-                Order: left of dealer → clockwise → dealer is last.
+                Order: dealer first → clockwise.
                 The server is responsible for the per-player timer; if the
                 timer fires it calls game.auto_fold(player_id).
   ROUND_END     Showdown has run, scores updated.  Call next_round() to loop.
@@ -543,11 +543,10 @@ class Game:
 
     def _build_decision_queue(self) -> None:
         """
-        Decision order: left of dealer first, clockwise, dealer last.
-        (Mirrors poker: left of button = UTG, button acts last.)
+        Decision order: dealer first, then clockwise.
         """
         n     = len(self._players)
-        start = (self.dealer_seat + 1) % n
+        start = self.dealer_seat % n
         self._decision_queue = [
             self._players[(start + i) % n].player_id
             for i in range(n)
