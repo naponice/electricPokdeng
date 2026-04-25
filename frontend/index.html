@@ -1161,6 +1161,14 @@ input:focus { border-color: var(--gold-dim); }
   <div class="game-main">
 
     <!-- SPLITTING zone (my cards) -->
+    <div id="zone-split-timer" class="decision-zone hidden" style="padding:1rem 1.25rem;">
+      <div class="decision-header" id="split-timer-header">Time to split your cards</div>
+      <div class="timer-wrap">
+        <div class="timer-track"><div class="timer-bar" id="split-timer-bar"></div></div>
+        <span class="timer-num" id="split-timer-num">60</span>
+      </div>
+    </div>
+
     <div id="zone-split" class="hand-section hidden">
 
       <!-- Drop zones: Front + Back -->
@@ -1289,6 +1297,7 @@ let scores       = {};       // {player_id: total}
 let decisionQueue = [];
 let timerInterval = null;
 let timerSecs    = 60;
+let splitTimerSeconds = 60;
 let splitDone    = false;    // I have confirmed my split
 let isWaiting    = false;    // joined mid-game, waiting for next round
 let leftPlayers  = new Set(); // player_ids who intentionally left
@@ -1460,6 +1469,7 @@ function onGameStarted(d) {
   document.getElementById('top-dealer').textContent = d.dealer;
   setPhaseBanner('Splitting hands…');
   gamePhase = 'splitting';
+  splitTimerSeconds = d.split_seconds || 60;
   splitDone = false;
   renderPlayersBar();
 }
@@ -1476,11 +1486,13 @@ function onDealCards(d) {
 
 // ── Split UI ─────────────────────────────────────────────────────────────────
 function renderSplitUI() {
+  show('zone-split-timer');
   hide('zone-split-wait'); hide('zone-my-split');
   hide('zone-showdown');   hide('zone-decision');
   hide('zone-spectating');
   show('zone-split');
   renderAllZones();
+  startTimer(splitTimerSeconds, 'split-timer-bar', 'split-timer-num');
 }
 
 function makeCardWrapper(idx, zone) {
@@ -1741,6 +1753,13 @@ function renderMySplitPreview(front, back) {
 }
 
 function onSplitReceived(d) {
+  if (d.player === myId && !splitDone) {
+    splitDone = true;
+    hide('zone-split');
+    show('zone-split-wait');
+    document.getElementById('split-wait-msg').textContent = 'Split locked in. Waiting for other players…';
+    renderMySplitPreview(d.front || [], d.back || []);
+  }
   renderPlayersBar(d.waiting_for);
   if (d.player !== myId) {
     toast(`${d.player} submitted their split`);
@@ -1748,9 +1767,11 @@ function onSplitReceived(d) {
 }
 
 function onAllSplit(d) {
+  stopTimer();
   decisionQueue = d.queue;
   setPhaseBanner('Fold or play');
   gamePhase = 'fold_decision';
+  hide('zone-split-timer');
   hide('zone-split-wait');
   hide('zone-split');
   show('zone-my-split');
@@ -1759,6 +1780,7 @@ function onAllSplit(d) {
 
 function onFoldPrompt(d) {
   stopTimer();
+  hide('zone-split-timer');
   hide('zone-split-wait');
   renderPlayersBar();
   if (d.player === myId) {
@@ -1796,6 +1818,7 @@ function onShowdown(d) {
   setPhaseBanner('Showdown');
   gamePhase = 'showdown';
   stopTimer();
+  hide('zone-split-timer');
   hide('zone-decision');
   hide('zone-spectating');
   hide('zone-split-wait');
@@ -1981,10 +2004,12 @@ function onJoinedGame(d) {
 }
 
 function onRoundStarted(d) {
+  stopTimer();
   hide('zone-showdown');
   hide('zone-spectating');
   hide('zone-decision');
   hide('zone-my-split');
+  show('zone-split-timer');
   splitDone   = false;
   handIdxs    = [];
   frontIdxs   = [];
@@ -1992,6 +2017,7 @@ function onRoundStarted(d) {
   revealed    = new Set();
   leftPlayers = new Set(d.left_players || []);
   gamePhase   = 'splitting';
+  splitTimerSeconds = d.split_seconds || 60;
   // Update player list (waiting players may have joined)
   if (d.players) players = d.players;
   document.getElementById('top-round').textContent  = 'Round ' + d.round;
@@ -2024,6 +2050,8 @@ function onGameState(d) {
     'WAITING':       'Waiting',
   };
   setPhaseBanner(bannerMap[d.phase] || d.phase || 'In progress');
+  if (d.phase === 'SPLITTING') show('zone-split-timer');
+  else hide('zone-split-timer');
   renderPlayersBar();
 }
 

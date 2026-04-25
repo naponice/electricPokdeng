@@ -94,7 +94,8 @@ def strs_to_cards(strs: List[str]) -> List[Card]:
 # Room state
 # ──────────────────────────────────────────────
 
-TURN_SECONDS = 60    # seconds per fold/play decision
+SPLIT_SECONDS = 60
+DECISION_SECONDS = 15
 
 
 @dataclass
@@ -374,7 +375,60 @@ def _start_timer(room_id: str, player_id: str) -> None:
         else:
             _prompt_next(room_id)
 
-    rs.timer = threading.Timer(TURN_SECONDS, _on_timeout)
+    rs.timer = threading.Timer(DECISION_SECONDS, _on_timeout)
+    rs.timer.daemon = True
+    rs.timer.start()
+
+
+def _start_split_timer(room_id: str) -> None:
+    """
+    Start the simultaneous split countdown. When it expires, any player who
+    has not submitted is auto-split using the dealt order: first 2 cards front,
+    last 3 cards back.
+    """
+    rs = rooms[room_id]
+    _cancel_timer(rs)
+
+    def _on_timeout():
+        with rs.lock:
+            if rs.game.phase != Phase.SPLITTING:
+                return
+
+            results = []
+            for player in rs.game.players:
+                if player.player_id in rs.left_players:
+                    continue
+                if player.has_split or not player.hand:
+                    continue
+                try:
+                    result = rs.game.submit_split(
+                        player.player_id,
+                        player.hand[:2],
+                        player.hand[2:],
+                    )
+                except GameError:
+                    continue
+                results.append((player.player_id, result))
+
+            _save_rooms()
+
+        for pid, result in results:
+            player = rs.game._get_player(pid)
+            socketio.emit("split_received", {
+                "player": pid,
+                "waiting_for": result.still_waiting,
+                "front": cards_to_strs(player.front),
+                "back": cards_to_strs(player.back),
+            }, to=room_id)
+
+        if results and results[-1][1].all_split:
+            socketio.emit("all_split", {
+                "next_to_decide": results[-1][1].next_to_decide,
+                "queue": rs.game._decision_queue,
+            }, to=room_id)
+            _prompt_next(room_id)
+
+    rs.timer = threading.Timer(SPLIT_SECONDS, _on_timeout)
     rs.timer.daemon = True
     rs.timer.start()
 
@@ -386,7 +440,7 @@ def _prompt_next(room_id: str) -> None:
     if player_id is None:
         return
     socketio.emit("fold_decision_prompt",
-                  {"player": player_id, "seconds": TURN_SECONDS},
+                  {"player": player_id, "seconds": DECISION_SECONDS},
                   to=room_id)
     _start_timer(room_id, player_id)
 
@@ -558,6 +612,7 @@ def handle_start_game(data):
     socketio.emit("game_started", {
         "round":  deal.round_number,
         "dealer": deal.dealer_id,
+        "split_seconds": SPLIT_SECONDS,
     }, to=room_id)
 
     # Send each player their PRIVATE hand — never broadcast all hands together
@@ -567,6 +622,8 @@ def handle_start_game(data):
         sid = rs.player_to_sid.get(pid)
         if sid:
             socketio.emit("deal_cards", {"cards": cards_to_strs(hand)}, to=sid)
+
+    _start_split_timer(room_id)
 
 
 @socketio.on("submit_split")
@@ -594,6 +651,8 @@ def handle_submit_split(data):
     socketio.emit("split_received", {
         "player":      player_id,
         "waiting_for": result.still_waiting,
+        "front":       data.get("front", []),
+        "back":        data.get("back", []),
     }, to=room_id)
 
     # Once everyone is in, open the fold/play phase
@@ -677,12 +736,15 @@ def handle_next_round(data):
         "dealer":      deal.dealer_id,
         "players":     all_players,
         "left_players": list(rs.left_players),
+        "split_seconds": SPLIT_SECONDS,
     }, to=room_id)
 
     for pid, hand in deal.dealt_hands.items():
         sid = rs.player_to_sid.get(pid)
         if sid:
             socketio.emit("deal_cards", {"cards": cards_to_strs(hand)}, to=sid)
+
+    _start_split_timer(room_id)
 
 
 @socketio.on("request_state")
@@ -737,6 +799,8 @@ def handle_leave_game(data):
                     socketio.emit("split_received", {
                         "player":      player_id,
                         "waiting_for": split_result.still_waiting,
+                        "front":       cards_to_strs(player_obj.front),
+                        "back":        cards_to_strs(player_obj.back),
                     }, to=room_id)
                     if split_result.all_split:
                         socketio.emit("all_split", {
@@ -794,6 +858,8 @@ def handle_disconnect():
                         socketio.emit("split_received", {
                             "player":      player_id,
                             "waiting_for": split_result.still_waiting,
+                            "front":       cards_to_strs(player_obj.front),
+                            "back":        cards_to_strs(player_obj.back),
                         }, to=room_id)
                         if split_result.all_split:
                             socketio.emit("all_split", {
