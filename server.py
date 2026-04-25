@@ -56,6 +56,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from engine.card import Card, Rank, Suit, RANK_SYMBOLS, SUIT_SYMBOLS
 from engine.game import Game, GameError, BattleResult, RoundResult, Phase
 from engine.evaluator import hand_label_brow, hand_label_trow, hand_strength_brow
+from db import store
 
 
 # ──────────────────────────────────────────────
@@ -223,6 +224,11 @@ def _room_from_dict(data: dict) -> RoomState:
 
 
 def _load_rooms() -> Dict[str, RoomState]:
+    if store.database_enabled():
+        return {
+            room_id: _room_from_dict(room_data)
+            for room_id, room_data in store.load_room_payloads().items()
+        }
     if not STATE_PATH.exists():
         return {}
     try:
@@ -236,6 +242,13 @@ def _load_rooms() -> Dict[str, RoomState]:
 
 
 def _save_rooms() -> None:
+    if store.database_enabled():
+        store.save_room_payloads({
+            room_id: _room_to_dict(rs)
+            for room_id, rs in rooms.items()
+        })
+        return
+
     payload = {
         "rooms": {
             room_id: _room_to_dict(rs)

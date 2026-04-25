@@ -1,0 +1,11 @@
+BEGIN;
+
+ALTER TABLE rooms
+    ADD COLUMN IF NOT EXISTS dealer_seat INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS decision_queue JSONB NOT NULL DEFAULT '[]'::jsonb,
+    ADD COLUMN IF NOT EXISTS fold_sequence JSONB NOT NULL DEFAULT '[]'::jsonb,
+    ADD COLUMN IF NOT EXISTS waiting_players JSONB NOT NULL DEFAULT '[]'::jsonb,
+    ADD COLUMN IF NOT EXISTS left_players JSONB NOT NULL DEFAULT '[]'::jsonb,
+    ADD COLUMN IF NOT EXISTS archived_scores JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+COMMIT;

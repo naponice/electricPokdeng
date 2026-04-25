@@ -3,3 +3,4 @@ Flask-SocketIO>=5.3,<6
 gunicorn>=23,<24
 eventlet>=0.36,<0.40
 simple-websocket>=1.0,<2
+psycopg[binary]>=3.2,<4
