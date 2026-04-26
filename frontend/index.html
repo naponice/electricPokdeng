@@ -335,6 +335,91 @@ input:focus { border-color: var(--gold-dim); }
   color: #f0c674;
 }
 
+.reaction-dock {
+  width: min(100%, 1040px);
+  margin: 0 auto;
+  padding: 0.9rem 1rem;
+  border-radius: 14px;
+  border: 1px solid rgba(201,148,58,.14);
+  background: linear-gradient(180deg, rgba(28,54,35,.92) 0%, rgba(18,40,25,.94) 100%);
+  box-shadow: 0 10px 24px rgba(0,0,0,.14);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.reaction-list {
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.reaction-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  border: 1px solid rgba(201,148,58,.22);
+  background: rgba(255,255,255,.04);
+  color: var(--text);
+  font-size: 1.3rem;
+  cursor: pointer;
+  transition: transform .16s ease, border-color .18s ease, box-shadow .18s ease, background .18s ease;
+}
+.reaction-btn:hover {
+  transform: translateY(-2px) scale(1.04);
+  border-color: rgba(201,148,58,.45);
+  background: rgba(201,148,58,.08);
+  box-shadow: 0 0 16px rgba(201,148,58,.14);
+}
+.reaction-btn:active {
+  transform: translateY(0) scale(0.98);
+}
+.reaction-btn.cooldown {
+  opacity: .46;
+  cursor: default;
+  pointer-events: none;
+}
+.reaction-bubble {
+  position: fixed;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  border: 1px solid rgba(201,148,58,.28);
+  background: rgba(14,31,20,.96);
+  box-shadow: 0 14px 26px rgba(0,0,0,.3), 0 0 18px rgba(201,148,58,.18);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 90;
+  animation: reaction-float 3.1s ease-out forwards;
+}
+.reaction-bubble-emoji {
+  font-size: 1.6rem;
+  line-height: 1;
+}
+@keyframes reaction-float {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -18px) scale(.72);
+  }
+  14% {
+    opacity: 1;
+    transform: translate(-50%, -28px) scale(1);
+  }
+  72% {
+    opacity: 1;
+    transform: translate(-50%, -92px) scale(1.02);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -122px) scale(.92);
+  }
+}
+
 /* ── Main Game Area ─────────────────────────── */
 .game-main {
   flex: 1;
@@ -962,6 +1047,40 @@ input:focus { border-color: var(--gold-dim); }
   line-height: 1.45;
   font-style: italic;
 }
+.fx-layer {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 1200;
+}
+.darby-stamp {
+  position: fixed;
+  transform: translate(-50%, -50%) scale(.86);
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255,208,102,.5);
+  background: rgba(13,36,20,.82);
+  box-shadow: 0 0 24px rgba(255,208,102,.18);
+  color: #ffe3a0;
+  font-family: 'Libre Baskerville', serif;
+  font-size: 0.9rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 1201;
+}
+.darby-stamp.show {
+  animation: darby-stamp-pop 2.2s ease forwards;
+}
+@keyframes darby-stamp-pop {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.7); }
+  14% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
+  72% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -62%) scale(.98); }
+}
 @keyframes summary-sheen {
   0% { transform: translateX(-10%) translateY(0); }
   50% { transform: translateX(10%) translateY(1%); }
@@ -1287,6 +1406,10 @@ input:focus { border-color: var(--gold-dim); }
   <!-- Main content -->
   <div class="game-main">
 
+    <div id="reaction-dock" class="reaction-dock hidden">
+      <div id="reaction-list" class="reaction-list"></div>
+    </div>
+
     <!-- SPLITTING zone (my cards) -->
     <div id="zone-split-timer" class="decision-zone hidden" style="padding:1rem 1.25rem;">
       <div class="decision-header" id="split-timer-header">Time to split your cards</div>
@@ -1419,6 +1542,8 @@ input:focus { border-color: var(--gold-dim); }
 
 <!-- Toast -->
 <div id="toast"></div>
+<canvas id="fx-layer" class="fx-layer hidden"></canvas>
+<div id="darby-stamp" class="darby-stamp hidden">Darby!</div>
 
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script>
@@ -1429,6 +1554,7 @@ let myRoom       = '';
 let myHand       = [];       // ['As','Kh',…]
 let frontSel     = [];       // legacy — superseded by frontIdxs (kept for compat)
 let gamePhase    = 'waiting';
+let currentRound = 0;
 let players      = [];       // [{player_id, seat, decision, score_total, …}]
 let scores       = {};       // {player_id: total}
 let decisionQueue = [];
@@ -1440,6 +1566,12 @@ let isWaiting    = false;    // joined mid-game, waiting for next round
 let leftPlayers  = new Set(); // player_ids who intentionally left
 let intentionalLeave = false; // set before socket.disconnect() to suppress reconnect toast
 let currentDealerId = '';
+let fxFrameHandle = null;
+let darbyFxToken = 0;
+let lastEmoteSentAt = 0;
+
+const EMOTE_CHOICES = ['🔥', '😂', '🤑', '🤫', '💸', '😈', '😭', '😵', '👀', '🍀'];
+const EMOTE_COOLDOWN_MS = 550;
 
 // ── Utilities ───────────────────────────────────────────────────────────────
 function show(id)  {
@@ -1555,6 +1687,7 @@ function joinGame() {
   socket.on('game_state',     onGameState);
   socket.on('waiting_room',   onWaitingRoom);
   socket.on('joined_game',    onJoinedGame);
+  socket.on('room_emote',     onRoomEmote);
   socket.on('reconnect', () => {
     toast('Reconnected — rejoining…');
     socket.emit('join', { room: myRoom, username: myId });
@@ -1566,6 +1699,8 @@ function nextRound()  { socket.emit('next_round',  { room: myRoom }); hide('zone
 // ── Event handlers ──────────────────────────────────────────────────────────
 function onJoined(d) {
   players = d.players; scores = d.scores; leftPlayers = new Set(d.left_players || []);
+  gamePhase = 'waiting';
+  syncReactionDock();
   if (d.reconnected) {
     // Switch to game screen immediately — game_state + deal_cards arrive right after
     showScreen('game');
@@ -1604,6 +1739,7 @@ function onGameStarted(d) {
   showScreen('game');
   document.getElementById('top-room').textContent  = 'ROOM: ' + myRoom;
   document.getElementById('top-round').textContent = 'Round ' + d.round;
+  currentRound = d.round || currentRound;
   document.getElementById('top-dealer').textContent = d.dealer;
   document.getElementById('top-dealer-name').textContent = d.dealer;
   currentDealerId = d.dealer;
@@ -1613,8 +1749,10 @@ function onGameStarted(d) {
   splitDone = false;
   updateFoldInsights();
   renderPlayersBar();
+  syncReactionDock();
 }
 function onDealCards(d) {
+  if (gamePhase === 'showdown') return;
   myHand = d.cards;
   splitDone = false;
   // Reset split state
@@ -1634,6 +1772,7 @@ function renderSplitUI() {
   show('zone-split');
   renderAllZones();
   startTimer(splitTimerSeconds, 'split-timer-bar', 'split-timer-num');
+  syncReactionDock();
 }
 
 function makeCardWrapper(idx, zone) {
@@ -1918,14 +2057,19 @@ function onAllSplit(d) {
   show('zone-my-split');
   updateFoldInsights();
   renderPlayersBar();
+  syncReactionDock();
 }
 
 function onFoldPrompt(d) {
+  if ((d.round && currentRound && d.round !== currentRound) || gamePhase === 'showdown') {
+    return;
+  }
   stopTimer();
   hide('zone-split-timer');
   hide('zone-split-wait');
   updateFoldInsights();
   renderPlayersBar();
+  syncReactionDock();
   if (d.player === myId) {
     hide('zone-spectating');
     show('zone-decision');
@@ -1961,6 +2105,7 @@ function decide(decision) {
 function onShowdown(d) {
   setPhaseBanner('Showdown');
   gamePhase = 'showdown';
+  currentRound = d.round || currentRound;
   stopTimer();
   hide('zone-split-timer');
   hide('zone-decision');
@@ -1974,6 +2119,7 @@ function onShowdown(d) {
   renderShowdown(d);
   show('zone-showdown');
   hide('zone-scores');
+  syncReactionDock();
 }
 
 function renderShowdown(d) {
@@ -2059,6 +2205,10 @@ function renderShowdown(d) {
       </tr>`;
     }).join('')}</tbody>
   </table>`;
+
+  if (d.darby_winner) {
+    triggerDarbyFireworks(d.darby_winner);
+  }
 }
 
 function renderShowdownSummary(d) {
@@ -2085,7 +2235,7 @@ function renderShowdownSummary(d) {
     const backStrengthBucket = Number.isInteger(summary.back_strength_bucket) ? summary.back_strength_bucket : 5;
     const backStrengthName = summary.back_strength_name || (revealCards ? 'Points' : 'Hidden');
 
-    return `<div class="showdown-summary-card effect-${backEffectTier} ${player.player_id === myId ? 'me' : ''}">
+    return `<div class="showdown-summary-card effect-${backEffectTier} ${player.player_id === myId ? 'me' : ''}" data-player-summary="${escapeHtml(player.player_id)}">
       <div class="summary-head">
         <div class="summary-rank-wrap">
           <div class="summary-rank-badge">#${index + 1}</div>
@@ -2130,6 +2280,8 @@ function onWaitingRoom(d) {
   players   = d.players || players;
   scores    = d.scores  || scores;
   leftPlayers = new Set(d.left_players || leftPlayers);
+  gamePhase = 'waiting';
+  syncReactionDock();
   // Reuse lobby screen in "watching" mode
   document.getElementById('lobby-title').textContent  = 'Game in progress';
   document.getElementById('lobby-msg').textContent    = '';
@@ -2145,6 +2297,7 @@ function onJoinedGame(d) {
   players   = d.players || players;
   showScreen('game');
   document.getElementById('top-room').textContent = 'ROOM: ' + myRoom;
+  syncReactionDock();
   // round_started will fire immediately after and fill in round/dealer/etc.
 }
 
@@ -2166,6 +2319,7 @@ function onRoundStarted(d) {
   // Update player list (waiting players may have joined)
   if (d.players) players = d.players;
   document.getElementById('top-round').textContent  = 'Round ' + d.round;
+  currentRound = d.round || currentRound;
   document.getElementById('top-dealer').textContent = d.dealer;
   document.getElementById('top-dealer-name').textContent = d.dealer;
   currentDealerId = d.dealer;
@@ -2179,12 +2333,14 @@ function onRoundStarted(d) {
   }
   updateFoldInsights();
   renderPlayersBar();
+  syncReactionDock();
 }
 
 function onGameState(d) {
   // Reconnected — rebuild UI from snapshot
   if (d.players) players = d.players;
   gamePhase = (d.phase || '').toLowerCase();
+  currentRound = d.round_number || currentRound;
 
   // Populate top bar (snapshot includes round_number and dealer_id)
   if (d.round_number) document.getElementById('top-round').textContent  = 'Round ' + d.round_number;
@@ -2202,10 +2358,18 @@ function onGameState(d) {
     'WAITING':       'Waiting',
   };
   setPhaseBanner(bannerMap[d.phase] || d.phase || 'In progress');
+  if (d.phase === 'ROUND_END') {
+    hide('zone-decision');
+    hide('zone-spectating');
+    hide('zone-split');
+    hide('zone-split-wait');
+    hide('zone-my-split');
+  }
   if (d.phase === 'SPLITTING') show('zone-split-timer');
   else hide('zone-split-timer');
   updateFoldInsights();
   renderPlayersBar();
+  syncReactionDock();
 }
 
 // ── UI helpers ───────────────────────────────────────────────────────────────
@@ -2246,7 +2410,7 @@ function renderPlayersBar(waitingFor = null) {
     const orderIndex = orderedActiveIds.indexOf(playerId);
     const orderBadge = orderIndex >= 0 ? `<span class="player-order">${orderIndex + 1}</span>` : '';
 
-    return `<div class="player-chip ${p.player_id === myId ? 'me' : ''} ${leftPlayers.has(p.player_id) ? 'left' : ''} ${folded ? 'folded' : ''} ${p.decision === 'play' ? 'playing' : ''} ${activeTurn ? 'active-turn' : ''}">
+    return `<div class="player-chip ${p.player_id === myId ? 'me' : ''} ${leftPlayers.has(p.player_id) ? 'left' : ''} ${folded ? 'folded' : ''} ${p.decision === 'play' ? 'playing' : ''} ${activeTurn ? 'active-turn' : ''}" data-player-chip="${escapeHtml(p.player_id)}">
       ${orderBadge}
       <div class="status-dot ${dot}"></div>
       <span class="player-name">${p.player_id}</span>
@@ -2298,6 +2462,185 @@ function updateFoldInsights() {
   if (decisionFoldPenalty) decisionFoldPenalty.textContent = deltaText;
 }
 
+function renderReactionDock() {
+  const list = document.getElementById('reaction-list');
+  if (!list) return;
+  list.innerHTML = EMOTE_CHOICES.map(emoji =>
+    `<button class="reaction-btn" type="button" aria-label="Send ${emoji} reaction" onclick="sendReaction('${emoji}')">${emoji}</button>`
+  ).join('');
+}
+
+function syncReactionDock() {
+  const enabled = gamePhase === 'fold_decision' || gamePhase === 'showdown';
+  const dock = document.getElementById('reaction-dock');
+  if (!dock) return;
+  if (enabled) dock.classList.remove('hidden');
+  else dock.classList.add('hidden');
+}
+
+function sendReaction(emoji) {
+  if (!socket || !myRoom) return;
+  if (!(gamePhase === 'fold_decision' || gamePhase === 'showdown')) return;
+  const now = Date.now();
+  if (now - lastEmoteSentAt < EMOTE_COOLDOWN_MS) return;
+  lastEmoteSentAt = now;
+  socket.emit('send_emote', { room: myRoom, emoji });
+  pulseReactionCooldown();
+}
+
+function pulseReactionCooldown() {
+  document.querySelectorAll('.reaction-btn').forEach(btn => btn.classList.add('cooldown'));
+  window.setTimeout(() => {
+    document.querySelectorAll('.reaction-btn').forEach(btn => btn.classList.remove('cooldown'));
+  }, EMOTE_COOLDOWN_MS);
+}
+
+function onRoomEmote(d) {
+  if (!d || !d.player || !d.emoji) return;
+  showReactionBubble(d.player, d.emoji);
+}
+
+function showReactionBubble(playerId, emoji) {
+  const anchor = getReactionAnchor(playerId);
+  if (!anchor) return;
+  const rect = anchor.getBoundingClientRect();
+  const bubble = document.createElement('div');
+  bubble.className = 'reaction-bubble';
+  bubble.innerHTML = `<span class="reaction-bubble-emoji">${escapeHtml(emoji)}</span>`;
+  bubble.style.left = `${rect.left + rect.width / 2}px`;
+  bubble.style.top = `${rect.top + Math.min(rect.height * 0.28, 54)}px`;
+  document.body.appendChild(bubble);
+  window.setTimeout(() => bubble.remove(), 3200);
+}
+
+function getReactionAnchor(playerId) {
+  const escapedId = CSS.escape(String(playerId));
+  if (gamePhase === 'showdown') {
+    const showdownCard = document.querySelector(`[data-player-summary="${escapedId}"] .summary-pyramid`);
+    if (showdownCard) return showdownCard;
+  }
+  return document.querySelector(`[data-player-chip="${escapedId}"]`) ||
+    document.querySelector(`[data-player-summary="${escapedId}"]`) ||
+    null;
+}
+
+function triggerDarbyFireworks(playerId) {
+  darbyFxToken += 1;
+  const token = darbyFxToken;
+  const card = document.querySelector(`[data-player-summary="${CSS.escape(String(playerId))}"]`);
+  if (!card) return;
+
+  const canvas = document.getElementById('fx-layer');
+  const stamp = document.getElementById('darby-stamp');
+  if (!canvas || !stamp) return;
+
+  const rect = card.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height * 0.24;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const resizeCanvas = () => {
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(window.innerWidth * dpr);
+    canvas.height = Math.floor(window.innerHeight * dpr);
+    canvas.style.width = `${window.innerWidth}px`;
+    canvas.style.height = `${window.innerHeight}px`;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  };
+  resizeCanvas();
+
+  canvas.classList.remove('hidden');
+  stamp.classList.remove('hidden');
+  stamp.classList.remove('show');
+  stamp.style.left = `${cx}px`;
+  stamp.style.top = `${cy - 36}px`;
+  void stamp.offsetWidth;
+  stamp.classList.add('show');
+
+  const particles = [];
+  const colors = ['#ffd166', '#ffe7a8', '#5dade2', '#2ecc71', '#ff7a8e'];
+
+  function addBurst(x, y, radius, count, delay = 0) {
+    for (let i = 0; i < count; i += 1) {
+      const angle = (Math.PI * 2 * i) / count + (Math.random() * 0.22);
+      const speed = radius * (0.6 + Math.random() * 0.65);
+      particles.push({
+        x,
+        y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 0,
+        maxLife: 950 + Math.random() * 700 + delay,
+        delay,
+        size: 1.8 + Math.random() * 2.4,
+        color: colors[Math.floor(Math.random() * colors.length)],
+      });
+    }
+  }
+
+  addBurst(cx, cy, 2.8, 32, 0);
+  addBurst(cx - 90, cy - 30, 2.2, 24, 180);
+  addBurst(cx + 92, cy - 22, 2.1, 24, 320);
+  addBurst(cx, cy - 108, 3.1, 36, 500);
+
+  const start = performance.now();
+
+  const tick = (now) => {
+    if (token !== darbyFxToken) return;
+    const elapsed = now - start;
+    ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+
+    let active = 0;
+    for (const p of particles) {
+      if (elapsed < p.delay) {
+        active += 1;
+        continue;
+      }
+      p.life += 16;
+      if (p.life >= p.maxLife) continue;
+      active += 1;
+
+      p.x += p.vx * 0.016;
+      p.y += p.vy * 0.016;
+      p.vx *= 0.986;
+      p.vy = p.vy * 0.988 + 0.012;
+
+      const alpha = 1 - (p.life / p.maxLife);
+      ctx.beginPath();
+      ctx.fillStyle = hexToRgba(p.color, alpha);
+      ctx.arc(p.x, p.y, p.size * (0.75 + alpha * 0.55), 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    if (active > 0 && elapsed < 2600) {
+      fxFrameHandle = requestAnimationFrame(tick);
+      return;
+    }
+
+    ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    canvas.classList.add('hidden');
+    setTimeout(() => {
+      if (token === darbyFxToken) {
+        stamp.classList.add('hidden');
+        stamp.classList.remove('show');
+      }
+    }, 300);
+  };
+
+  if (fxFrameHandle) cancelAnimationFrame(fxFrameHandle);
+  fxFrameHandle = requestAnimationFrame(tick);
+}
+
+function hexToRgba(hex, alpha) {
+  const clean = hex.replace('#', '');
+  const bigint = parseInt(clean, 16);
+  const r = (bigint >> 16) & 255;
+  const g = (bigint >> 8) & 255;
+  const b = bigint & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 function decisionLabel(decision) {
   if (decision === 'fold_reveal') return 'fold and reveal';
   return decision || '';
@@ -2334,6 +2677,8 @@ function leaveRoom() {
   if (!socket || !myRoom) return;
   socket.emit('leave_game', { room: myRoom });
   intentionalLeave = true;
+  gamePhase = 'waiting';
+  syncReactionDock();
   socket.disconnect();
   socket = null;
   intentionalLeave = false;
@@ -2346,6 +2691,9 @@ function onPlayerLeft(d) {
   const reason = d.intentional ? 'left the room' : 'disconnected';
   toast(`${d.player_id} ${reason}`);
 }
+
+renderReactionDock();
+syncReactionDock();
 
 // ── Keyboard shortcut ────────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {

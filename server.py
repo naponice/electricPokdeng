@@ -16,6 +16,7 @@ CLIENT → SERVER events
   start_game        {room}
   submit_split      {room, front: [card_str, ...], back: [card_str, ...]}
   submit_decision   {room, decision: 'play'|'fold'|'fold_reveal'}
+  send_emote        {room, emoji}
   next_round        {room}
   request_state     {room}          ← reconnecting client
 
@@ -31,6 +32,7 @@ SERVER → CLIENT events
   all_split         {next_to_decide, queue}                          → room
   fold_decision_prompt  {player, seconds}                            → room
   player_decided    {player, decision}                               → room
+  room_emote        {player, emoji}                                  → room
   showdown          {round, battles, play_players, fold_players,
                      deltas, scores, player_summaries}               → room
   round_started     {round, dealer}                                  → room
@@ -97,6 +99,7 @@ def strs_to_cards(strs: List[str]) -> List[Card]:
 
 SPLIT_SECONDS = 60
 DECISION_SECONDS = 15
+ALLOWED_EMOJIS = {"🔥", "😂", "🤑", "🤫", "💸", "😈", "😭", "😵", "👀", "🍀"}
 
 
 @dataclass
@@ -369,16 +372,22 @@ def _start_timer(room_id: str, player_id: str) -> None:
     """
     rs = rooms[room_id]
     _cancel_timer(rs)
+    expected_round = rs.game.round_number
 
     def _on_timeout():
         # Runs in a background thread — use socketio.emit, not emit
         with rs.lock:
+            if rs.game.phase != Phase.FOLD_DECISION:
+                return
+            if rs.game.round_number != expected_round:
+                return
             if rs.game.current_decision_player() != player_id:
                 return     # player already acted; stale timer
             try:
                 result = rs.game.auto_fold(player_id)
             except GameError:
                 return
+            _save_rooms()
 
         socketio.emit("player_decided",
                       {"player": player_id, "decision": "fold"},
@@ -401,10 +410,13 @@ def _start_split_timer(room_id: str) -> None:
     """
     rs = rooms[room_id]
     _cancel_timer(rs)
+    expected_round = rs.game.round_number
 
     def _on_timeout():
         with rs.lock:
             if rs.game.phase != Phase.SPLITTING:
+                return
+            if rs.game.round_number != expected_round:
                 return
 
             results = []
@@ -449,11 +461,15 @@ def _start_split_timer(room_id: str) -> None:
 def _prompt_next(room_id: str) -> None:
     """Tell the room who decides next and start their timer."""
     rs = rooms[room_id]
-    player_id = rs.game.current_decision_player()
-    if player_id is None:
-        return
+    with rs.lock:
+        if rs.game.phase != Phase.FOLD_DECISION:
+            return
+        player_id = rs.game.current_decision_player()
+        round_number = rs.game.round_number
+        if player_id is None:
+            return
     socketio.emit("fold_decision_prompt",
-                  {"player": player_id, "seconds": DECISION_SECONDS},
+                  {"player": player_id, "seconds": DECISION_SECONDS, "round": round_number},
                   to=room_id)
     _start_timer(room_id, player_id)
 
@@ -520,7 +536,7 @@ def handle_join(data):
             emit("game_state", rs.game.get_state_snapshot())
             try:
                 player = rs.game._get_player(player_id)
-                if player.hand:
+                if player.hand and rs.game.phase in {Phase.SPLITTING, Phase.FOLD_DECISION}:
                     emit("deal_cards", {"cards": cards_to_strs(player.hand)})
             except GameError:
                 pass
@@ -705,6 +721,32 @@ def handle_submit_decision(data):
         _prompt_next(room_id)
 
 
+@socketio.on("send_emote")
+def handle_send_emote(data):
+    rs, player_id = _resolve(data)
+    if rs is None:
+        return
+
+    room_id = data["room"]
+    emoji = str(data.get("emoji", "")).strip()
+    if emoji not in ALLOWED_EMOJIS:
+        return emit("error", {"message": "Invalid emote."})
+
+    with rs.lock:
+        if rs.game.phase not in {Phase.FOLD_DECISION, Phase.ROUND_END}:
+            return emit("error", {"message": "Emotes are only available during decisions and showdown."})
+        if player_id in rs.left_players:
+            return emit("error", {"message": "Left players cannot send emotes."})
+        if not any(player.player_id == player_id for player in rs.game.players):
+            return emit("error", {"message": "Only active players can send emotes."})
+
+    socketio.emit("room_emote", {
+        "player": player_id,
+        "emoji": emoji,
+        "phase": rs.game.phase.name,
+    }, to=room_id)
+
+
 @socketio.on("next_round")
 def handle_next_round(data):
     rs, player_id = _resolve(data)
@@ -775,7 +817,7 @@ def handle_request_state(data):
     # Re-send their private hand if the round is still live
     try:
         player = rs.game._get_player(player_id)
-        if player.hand:
+        if player.hand and rs.game.phase in {Phase.SPLITTING, Phase.FOLD_DECISION}:
             emit("deal_cards", {"cards": cards_to_strs(player.hand)})
     except GameError:
         pass
